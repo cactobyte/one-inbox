@@ -2,18 +2,27 @@
  * Bootstrap one account and one owner agent so you can sign in.
  *
  * Run once, after migrating:
- *   DATABASE_URL=... SESSION_SECRET=... \
  *   SEED_AGENT_EMAIL=you@example.com SEED_AGENT_PASSWORD=secret \
- *   node --experimental-strip-types db/seed.ts
+ *   node --env-file=.env --experimental-strip-types db/seed.ts
  *
  * There is no signup UI yet (see docs/backlog.md); this is how the first
- * agent is created.
+ * agent is created. Self-contained (own DB client) so it runs under plain
+ * Node without a TypeScript path resolver.
  */
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 import { eq } from "drizzle-orm";
 
-import { db } from "./index.ts";
 import { account, agent } from "./schema.ts";
 import { hashPassword } from "../lib/password.ts";
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error("DATABASE_URL is not set (pass --env-file=.env).");
+  process.exit(1);
+}
+
+const db = drizzle(neon(connectionString), { schema: { account, agent } });
 
 const accountName = process.env.SEED_ACCOUNT_NAME ?? "Demo Co";
 const email = (process.env.SEED_AGENT_EMAIL ?? "owner@example.com")
