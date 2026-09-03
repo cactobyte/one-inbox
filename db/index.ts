@@ -1,16 +1,25 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle, type NeonHttpDatabase } from "drizzle-orm/neon-http";
+import { Pool } from "@neondatabase/serverless";
+import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless";
 
 import * as schema from "./schema";
 
-let client: NeonHttpDatabase<typeof schema> | undefined;
+export type Schema = typeof schema;
+export type Database = NeonDatabase<Schema>;
+
+let pool: Pool | undefined;
+let client: Database | undefined;
 
 /**
- * Lazily-created Neon HTTP client. Created on first query, not on import, so
- * `next build` and tooling don't need DATABASE_URL just to load a module.
- * Neon's HTTP driver is stateless, so there is no pool to manage on Vercel.
+ * Lazily-created Neon client. Uses the WebSocket pool driver (not neon-http)
+ * because the inbound ingest path needs a real multi-statement transaction —
+ * find-or-create the contact and conversation, write the message, write the
+ * event, bump the counters, all or nothing. Node 22 has a global WebSocket,
+ * so no `ws` polyfill is needed.
+ *
+ * Created on first query, not on import, so `next build` and tooling don't
+ * need DATABASE_URL just to load a module.
  */
-function getDb(): NeonHttpDatabase<typeof schema> {
+function getDb(): Database {
   if (!client) {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
@@ -18,15 +27,14 @@ function getDb(): NeonHttpDatabase<typeof schema> {
         "DATABASE_URL is not set. Copy .env.example to .env and add a Neon connection string.",
       );
     }
-    client = drizzle(neon(connectionString), { schema });
+    pool = new Pool({ connectionString });
+    client = drizzle(pool, { schema });
   }
   return client;
 }
 
-export const db = new Proxy({} as NeonHttpDatabase<typeof schema>, {
+export const db = new Proxy({} as Database, {
   get(_target, prop, receiver) {
     return Reflect.get(getDb(), prop, receiver);
   },
 });
-
-export type Database = NeonHttpDatabase<typeof schema>;
