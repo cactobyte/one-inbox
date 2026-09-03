@@ -66,3 +66,67 @@ with a narrowing TypeScript union type. A new channel ships roughly monthly;
 widening a real Postgres enum is a migration every time, a plain text column
 is not. Integrity that matters (foreign keys, the dedupe constraint) is
 still enforced in the database.
+
+---
+
+## 2026-09-03 — Day 2: channel adapters and message flow
+
+### Adapter interface: exactly two operations, no channel identity in the model
+
+`ChannelAdapter` is `parseInbound(payload, config)` and
+`sendOutbound(message, config)` — nothing else. The normalised
+`InboundMessage` / `OutboundMessage` name no channel; the person and the
+thread are opaque platform-id strings the core stores but never interprets.
+Signature verification, retry, echo-filtering are deliberately *not* on the
+interface. Rejected: putting a `verify()` / `handleWebhook()` method on the
+adapter — it would make "exactly two things" false and leak transport
+concerns into every future adapter.
+
+### Platform identity lives on `contact` / `conversation`, not a mapping table
+
+To find-or-create the contact and conversation for an inbound message we need
+to map (platform person, platform thread) → rows. The clean design is a
+join table (contact ↔ channel with a source id); that would be an eighth
+table. Instead: `contact.platform_contact_id` (unique per account) and
+`conversation.platform_thread_id` (unique per channel), both nullable.
+Trade-off: a contact is currently tied to whichever account first saw that
+platform id; cross-channel identity and merge are unsolved (backlog).
+
+### DB driver: switched to the Neon WebSocket pool
+
+`neon-http` has no interactive transactions. The inbound path must write
+contact + conversation + message + event atomically, so `db/index.ts` now
+uses `drizzle-orm/neon-serverless` with a `Pool`. Day 1's questions.md
+anticipated this. Lazy creation and build-without-DATABASE_URL are kept.
+
+### Idempotency: unique index first, race caught second
+
+Dedupe is `UNIQUE(channel_id, platform_message_id)` from day 1. `ingestInbound`
+checks for the existing message inside the transaction and returns
+`status: "duplicate"`; if two identical webhooks race, the loser's `INSERT`
+hits the constraint, the transaction rolls back, and the caller re-reads the
+committed row and still returns `duplicate`. No new message, no new event.
+
+### Website adapter: one visitor is one thread; `sendOutbound` is a real no-op
+
+v1 maps `thread.platformId = visitorId` — the widget doesn't track threads.
+`sendOutbound` calls no API: the widget has no inbound endpoint, it *pulls*
+outbound messages through the real-time layer (day 3+). It acknowledges with
+a null platform message id. This is the actual behaviour of a pull channel,
+not a stub. Multi-thread support is in the backlog.
+
+### Inbound webhook auth: shared per-channel token, for now
+
+The endpoint checks `x-channel-token` against `channel.config.inboundToken`
+(constant-time). Real platforms sign webhooks differently (LINE: HMAC-SHA256
+of the body; Messenger: `X-Hub-Signature-256`). That per-platform
+verification will need a home when LINE lands — likely a third adapter
+capability or an endpoint-level strategy keyed on channel type. Noted in
+backlog; not built now.
+
+### Tests: pglite, not mocks
+
+`@electric-sql/pglite` (dev dependency, approved) gives an in-process real
+Postgres. The dedupe unique index and every `account_id` filter run for
+real in CI. Rejected: a fake in-memory repository (would not prove Postgres
+enforces anything) and hitting Neon from CI (needs secrets, flaky).

@@ -38,10 +38,39 @@ Things noticed during day 1 that are out of scope for day 1. Not prioritised.
 - Decide websocket-free presence / "agent is typing" approach when we build
   the inbox UI.
 
+## Channels / message flow (noticed day 2)
+
+- **Per-platform webhook signature verification.** The inbound endpoint uses
+  a shared `x-channel-token` from `channel.config`. LINE signs with
+  HMAC-SHA256 of the raw body, Messenger with `X-Hub-Signature-256`. Needs a
+  real home (adapter capability or endpoint strategy) before LINE.
+- **Website multi-thread.** One visitor currently maps to one conversation
+  forever. Real widgets let a visitor start a new thread ("new conversation")
+  and show history. Add a thread id to the widget payload.
+- **Outbound delivery ordering.** `sendReply` delivers through the adapter
+  *then* writes the row. For real channels a crash in between sends an
+  unlogged message. Want an outbox / `pending → sent` message status.
+- **Conversation-creation race.** Two different messages for a brand-new
+  thread arriving together can each write a `created` event. Harmless but
+  untidy; an upsert-with-RETURNING or advisory lock would fix it.
+- **`event` needs a monotonic sequence.** Ordering is `created_at` (ms
+  precision) + a random uuid. Analytics that cares about "created before
+  message_received" needs a `bigserial` sequence or per-conversation counter.
+- **Outbound reply idempotency.** No dedupe on agent replies; a double-click
+  writes two messages. Needs a client-supplied idempotency key (day 4 UI).
+- **`message_sent` vs `replied` event types.** Both exist; `ingestInbound`
+  uses neither for outbound, `sendReply` uses `replied`. Pick one convention.
+- **Neon `Pool` lifecycle in serverless.** We never call `pool.end()`. Fine
+  at low volume; revisit if we see connection exhaustion on Vercel.
+- **`message.attachments` / `event.data` are untyped `jsonb`.** Consider a
+  parse (zod or hand-rolled) at the read boundary.
+
 ## Product (later days, listed so they are not lost)
 
-- Website chat widget (day 2/3).
+- Website chat widget (day 3).
 - Channel adapters: LINE first (Thailand), then Messenger, Instagram,
   WhatsApp, Shopee, Lazada.
-- Inbox UI beyond the empty state.
+- Inbox UI beyond the empty state (day 4).
 - `event`-table-driven analytics and workflow automation.
+- Conversation list / message list API endpoints (with pagination per
+  CLAUDE.md rule 4) — needed by the inbox UI.
