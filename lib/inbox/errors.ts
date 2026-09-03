@@ -6,6 +6,14 @@ export class NotFoundError extends Error {
   }
 }
 
+/** The caller's input was malformed. The caller should answer 400. */
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
 /** True for a Postgres unique-constraint violation (SQLSTATE 23505). */
 export function isUniqueViolation(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
