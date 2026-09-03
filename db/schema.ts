@@ -41,6 +41,8 @@ export type AgentRole = "owner" | "admin" | "agent";
 /** Conversation lifecycle events written to the append-only `event` table. */
 export type EventType =
   | "created"
+  | "message_received"
+  | "message_sent"
   | "assigned"
   | "unassigned"
   | "replied"
@@ -90,17 +92,35 @@ export const channel = pgTable("channel", {
   ...timestamps,
 });
 
-/** A person. May later be merged when the same human appears on two channels. */
-export const contact = pgTable("contact", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  accountId: uuid("account_id")
-    .notNull()
-    .references(() => account.id, { onDelete: "cascade" }),
-  displayName: text("display_name").notNull(),
-  email: text("email"),
-  phone: text("phone"),
-  ...timestamps,
-});
+/**
+ * A person. May later be merged when the same human appears on two channels.
+ *
+ * `platformContactId` is the id the source platform uses for this person (a
+ * LINE user id, a Messenger PSID, the widget's visitor token). An adapter
+ * never writes here; the core uses it to find-or-create this row idempotently.
+ * Unique per account, nullable for contacts created by hand.
+ */
+export const contact = pgTable(
+  "contact",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => account.id, { onDelete: "cascade" }),
+    platformContactId: text("platform_contact_id"),
+    displayName: text("display_name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    ...timestamps,
+  },
+  (t) => [
+    unique("contact_account_platform_id_key").on(
+      t.accountId,
+      t.platformContactId,
+    ),
+    index("contact_account_id_idx").on(t.accountId),
+  ],
+);
 
 /** A thread with a contact on a channel. */
 export const conversation = pgTable("conversation", {
@@ -114,6 +134,9 @@ export const conversation = pgTable("conversation", {
   contactId: uuid("contact_id")
     .notNull()
     .references(() => contact.id, { onDelete: "cascade" }),
+  // The platform's id for this thread. The core's idempotency key for
+  // find-or-create; adapters never write it. Unique per channel.
+  platformThreadId: text("platform_thread_id"),
   status: text("status")
     .$type<ConversationStatus>()
     .notNull()
@@ -129,6 +152,10 @@ export const conversation = pgTable("conversation", {
   lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
   ...timestamps,
 }, (t) => [
+  unique("conversation_channel_thread_id_key").on(
+    t.channelId,
+    t.platformThreadId,
+  ),
   index("conversation_account_id_idx").on(t.accountId),
   index("conversation_assignee_id_idx").on(t.assigneeId),
 ]);
