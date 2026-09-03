@@ -1,0 +1,247 @@
+/**
+ * One Inbox data model — seven tables, all scoped to `account`.
+ *
+ * Rules that shaped this file (see CLAUDE.md):
+ *  - Every table except `account` carries `account_id`. No global rows.
+ *  - `message` stores the platform's own id and is unique per channel, so
+ *    redelivered webhooks never create duplicates.
+ *  - `event` is append-only: conversation state changes are logged here for
+ *    analytics and automation to read later.
+ *
+ * `channel.type`, `event.type` and a few status columns are plain text with a
+ * TypeScript union rather than a Postgres enum: the product adds a channel
+ * roughly every month and widening an enum is a migration each time.
+ */
+import { relations, sql } from "drizzle-orm";
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
+
+export type ChannelType =
+  | "widget"
+  | "line"
+  | "messenger"
+  | "instagram"
+  | "whatsapp"
+  | "shopee"
+  | "lazada";
+
+export type ConversationStatus = "open" | "pending" | "resolved";
+export type MessageDirection = "inbound" | "outbound";
+export type MessageAuthorType = "contact" | "agent" | "system";
+export type AgentRole = "owner" | "admin" | "agent";
+
+/** Conversation lifecycle events written to the append-only `event` table. */
+export type EventType =
+  | "created"
+  | "assigned"
+  | "unassigned"
+  | "replied"
+  | "resolved"
+  | "reopened"
+  | "tagged"
+  | "untagged";
+
+const timestamps = {
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+};
+
+/** The customer business. Everything else hangs off this. */
+export const account = pgTable("account", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  ...timestamps,
+});
+
+/** A staff member who works the inbox. Roles exist from day one. */
+export const agent = pgTable("agent", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => account.id, { onDelete: "cascade" }),
+  email: text("email").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  name: text("name").notNull(),
+  role: text("role").$type<AgentRole>().notNull().default("agent"),
+  ...timestamps,
+});
+
+/** A connected inbox: this account's widget, LINE OA, WhatsApp number, ... */
+export const channel = pgTable("channel", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => account.id, { onDelete: "cascade" }),
+  type: text("type").$type<ChannelType>().notNull(),
+  name: text("name").notNull(),
+  config: jsonb("config").notNull().default(sql`'{}'::jsonb`),
+  ...timestamps,
+});
+
+/** A person. May later be merged when the same human appears on two channels. */
+export const contact = pgTable("contact", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => account.id, { onDelete: "cascade" }),
+  displayName: text("display_name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  ...timestamps,
+});
+
+/** A thread with a contact on a channel. */
+export const conversation = pgTable("conversation", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => account.id, { onDelete: "cascade" }),
+  channelId: uuid("channel_id")
+    .notNull()
+    .references(() => channel.id, { onDelete: "cascade" }),
+  contactId: uuid("contact_id")
+    .notNull()
+    .references(() => contact.id, { onDelete: "cascade" }),
+  status: text("status")
+    .$type<ConversationStatus>()
+    .notNull()
+    .default("open"),
+  assigneeId: uuid("assignee_id").references(() => agent.id, {
+    onDelete: "set null",
+  }),
+  unreadCount: integer("unread_count").notNull().default(0),
+  tags: text("tags")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  ...timestamps,
+}, (t) => [
+  index("conversation_account_id_idx").on(t.accountId),
+  index("conversation_assignee_id_idx").on(t.assigneeId),
+]);
+
+/**
+ * Normalised message. Nothing downstream reads the raw platform payload.
+ * `platformMessageId` is the id the source platform assigned; it is unique
+ * per channel so redelivered webhooks are idempotent. Outbound messages may
+ * not have one yet, and Postgres treats NULLs as distinct, so that is fine.
+ */
+export const message = pgTable(
+  "message",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => account.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channel.id, { onDelete: "cascade" }),
+    direction: text("direction").$type<MessageDirection>().notNull(),
+    authorType: text("author_type").$type<MessageAuthorType>().notNull(),
+    authorAgentId: uuid("author_agent_id").references(() => agent.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull().default(""),
+    attachments: jsonb("attachments").notNull().default(sql`'[]'::jsonb`),
+    platformMessageId: text("platform_message_id"),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("message_channel_platform_id_key").on(
+      t.channelId,
+      t.platformMessageId,
+    ),
+    index("message_account_id_idx").on(t.accountId),
+    index("message_conversation_id_idx").on(t.conversationId),
+  ],
+);
+
+/**
+ * Append-only log of what happened to a conversation. Never updated or
+ * deleted. Analytics and workflow automation both read this later.
+ */
+export const event = pgTable("event", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  accountId: uuid("account_id")
+    .notNull()
+    .references(() => account.id, { onDelete: "cascade" }),
+  conversationId: uuid("conversation_id")
+    .notNull()
+    .references(() => conversation.id, { onDelete: "cascade" }),
+  type: text("type").$type<EventType>().notNull(),
+  actorAgentId: uuid("actor_agent_id").references(() => agent.id, {
+    onDelete: "set null",
+  }),
+  data: jsonb("data").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (t) => [
+  index("event_account_id_idx").on(t.accountId),
+  index("event_conversation_id_idx").on(t.conversationId),
+]);
+
+export const accountRelations = relations(account, ({ many }) => ({
+  agents: many(agent),
+  channels: many(channel),
+  contacts: many(contact),
+  conversations: many(conversation),
+}));
+
+export const conversationRelations = relations(conversation, ({ one, many }) => ({
+  account: one(account, {
+    fields: [conversation.accountId],
+    references: [account.id],
+  }),
+  channel: one(channel, {
+    fields: [conversation.channelId],
+    references: [channel.id],
+  }),
+  contact: one(contact, {
+    fields: [conversation.contactId],
+    references: [contact.id],
+  }),
+  assignee: one(agent, {
+    fields: [conversation.assigneeId],
+    references: [agent.id],
+  }),
+  messages: many(message),
+  events: many(event),
+}));
+
+export const messageRelations = relations(message, ({ one }) => ({
+  conversation: one(conversation, {
+    fields: [message.conversationId],
+    references: [conversation.id],
+  }),
+  channel: one(channel, {
+    fields: [message.channelId],
+    references: [channel.id],
+  }),
+}));
+
+export const eventRelations = relations(event, ({ one }) => ({
+  conversation: one(conversation, {
+    fields: [event.conversationId],
+    references: [conversation.id],
+  }),
+}));
