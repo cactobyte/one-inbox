@@ -1,7 +1,8 @@
 /**
- * Bootstrap one account and one owner agent so you can sign in.
+ * Bootstrap one account, one owner agent, and one website (widget) channel
+ * so you can sign in and exercise the inbound endpoint.
  *
- * Run once, after migrating:
+ * Run after migrating:
  *   SEED_AGENT_EMAIL=you@example.com SEED_AGENT_PASSWORD=secret \
  *   node --env-file=.env --experimental-strip-types db/seed.ts
  *
@@ -9,11 +10,13 @@
  * agent is created. Self-contained (own DB client) so it runs under plain
  * Node without a TypeScript path resolver.
  */
+import { randomBytes } from "node:crypto";
+
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { eq } from "drizzle-orm";
 
-import { account, agent } from "./schema.ts";
+import { account, agent, channel } from "./schema.ts";
 import { hashPassword } from "../lib/password.ts";
 
 const connectionString = process.env.DATABASE_URL;
@@ -22,7 +25,7 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const db = drizzle(neon(connectionString), { schema: { account, agent } });
+const db = drizzle(neon(connectionString), { schema: { account, agent, channel } });
 
 const accountName = process.env.SEED_ACCOUNT_NAME ?? "Demo Co";
 const email = (process.env.SEED_AGENT_EMAIL ?? "owner@example.com")
@@ -31,28 +34,59 @@ const email = (process.env.SEED_AGENT_EMAIL ?? "owner@example.com")
 const password = process.env.SEED_AGENT_PASSWORD ?? "changeme123";
 
 const existing = await db
-  .select({ id: agent.id })
+  .select({ id: agent.id, accountId: agent.accountId })
   .from(agent)
   .where(eq(agent.email, email))
   .limit(1);
 
+let accountId: string;
+
 if (existing.length > 0) {
-  console.log(`Agent ${email} already exists — nothing to do.`);
-  process.exit(0);
+  accountId = existing[0].accountId;
+  console.log(`Agent ${email} already exists — reusing its account.`);
+} else {
+  const [acct] = await db
+    .insert(account)
+    .values({ name: accountName })
+    .returning({ id: account.id });
+  accountId = acct.id;
+
+  await db.insert(agent).values({
+    accountId,
+    email,
+    passwordHash: await hashPassword(password),
+    name: process.env.SEED_AGENT_NAME ?? "Owner",
+    role: "owner",
+  });
+  console.log(`Created account "${accountName}" and agent ${email}.`);
 }
 
-const [acct] = await db
-  .insert(account)
-  .values({ name: accountName })
-  .returning({ id: account.id });
+const [existingChannel] = await db
+  .select({ id: channel.id, config: channel.config })
+  .from(channel)
+  .where(eq(channel.accountId, accountId))
+  .limit(1);
 
-await db.insert(agent).values({
-  accountId: acct.id,
-  email,
-  passwordHash: await hashPassword(password),
-  name: process.env.SEED_AGENT_NAME ?? "Owner",
-  role: "owner",
-});
+if (existingChannel) {
+  const token = (existingChannel.config as { inboundToken?: string }).inboundToken;
+  console.log(`Website channel already exists: ${existingChannel.id}`);
+  if (token) console.log(`  inbound token: ${token}`);
+} else {
+  const inboundToken = randomBytes(24).toString("hex");
+  const [ch] = await db
+    .insert(channel)
+    .values({
+      accountId,
+      type: "widget",
+      name: "Website",
+      config: { inboundToken },
+    })
+    .returning({ id: channel.id });
+  console.log(`Created website channel: ${ch.id}`);
+  console.log(`  inbound token: ${inboundToken}`);
+  console.log(
+    `  POST http://localhost:3000/api/channels/${ch.id}/inbound  (header x-channel-token)`,
+  );
+}
 
-console.log(`Created account "${accountName}" and agent ${email}.`);
 process.exit(0);
