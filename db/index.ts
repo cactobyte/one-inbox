@@ -1,10 +1,18 @@
 import { Pool } from "@neondatabase/serverless";
 import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 
 import * as schema from "./schema";
 
 export type Schema = typeof schema;
 export type Database = NeonDatabase<Schema>;
+
+/**
+ * A drizzle Postgres handle over our schema, independent of the driver.
+ * Production passes the Neon client; tests pass a pglite client. Services
+ * take this so they can run against either.
+ */
+export type AppDb = PgDatabase<PgQueryResultHKT, Schema>;
 
 let pool: Pool | undefined;
 let client: Database | undefined;
