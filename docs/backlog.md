@@ -65,12 +65,32 @@ Things noticed during day 1 that are out of scope for day 1. Not prioritised.
 - **`message.attachments` / `event.data` are untyped `jsonb`.** Consider a
   parse (zod or hand-rolled) at the read boundary.
 
+## Widget (noticed day 3)
+
+- **pglite doesn't reproduce Neon's timestamp wire precision.** The
+  `created_at` cursor-precision bug (see decisions.md) passed all 35 tests
+  against pglite and only showed up testing against real Neon over the
+  actual driver. Worth remembering next time timing-sensitive logic is
+  "proven" by the pglite suite alone — it's real Postgres, but not
+  necessarily the same driver-level marshalling as production.
+- **No visitor merge / no cross-device identity.** Clearing `localStorage`,
+  switching browsers, or private mode all start a brand-new contact and
+  conversation. Same limitation as day 2's contact-merge gap, sharper now
+  that there's a real client minting ids.
+- **Widget has no "connecting…" first-paint state** beyond the header dot;
+  a slow first load shows an empty message list with no affordance.
+- **No typing indicator, no read receipts, no delivery retry UI** — a
+  failed send just appends an inline error string to the bubble text.
+- **No file/image upload from the widget.** `attachments` render if a
+  received message has them; there's no way to attach one when sending.
+- **Widget CSS is unthemed** — single fixed black/white palette, no way for
+  a customer to brand it. Fine for week one, not for a real embed.
+- **SSE stream reconnect cadence (1.5s poll) is a fixed constant.** No
+  backoff, no adjustment for idle vs active conversations. Fine at the
+  current scale; revisit if polling becomes a real DB load.
+
 ## Product (later days, listed so they are not lost)
 
-- Website chat widget (day 3).
 - Channel adapters: LINE first (Thailand), then Messenger, Instagram,
   WhatsApp, Shopee, Lazada.
-- Inbox UI beyond the empty state (day 4).
 - `event`-table-driven analytics and workflow automation.
-- Conversation list / message list API endpoints (with pagination per
-  CLAUDE.md rule 4) — needed by the inbox UI.

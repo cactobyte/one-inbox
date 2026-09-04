@@ -188,7 +188,15 @@ export const message = pgTable(
     attachments: jsonb("attachments").notNull().default(sql`'[]'::jsonb`),
     platformMessageId: text("platform_message_id"),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
-    createdAt: timestamp("created_at", { withTimezone: true })
+    // precision: 3 (milliseconds) is load-bearing, not cosmetic: the day 3
+    // SSE cursor round-trips this column through a JS `Date`, which only
+    // holds millisecond precision. Postgres `timestamptz`'s default is
+    // microseconds, so without this a cursor built from a row's own
+    // createdAt would compare as "less than" the row it came from (the
+    // stored value has non-zero microseconds a Date can't carry) and the
+    // stream would resend that row forever. Truncating storage to
+    // milliseconds makes the round-trip exact. See docs/decisions.md.
+    createdAt: timestamp("created_at", { withTimezone: true, precision: 3 })
       .notNull()
       .defaultNow(),
   },

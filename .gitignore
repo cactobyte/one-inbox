@@ -44,3 +44,6 @@ next-env.d.ts
 # local-only project brief / product strategy — not published
 CLAUDE.md
 
+# compiled widget bundle — generated from widget/src by predev/prebuild
+/public/widget/
+

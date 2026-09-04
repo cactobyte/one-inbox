@@ -15,6 +15,13 @@
       "when": 1788435969980,
       "tag": "0001_channel_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788541575247,
+      "tag": "0002_message_created_at_ms_precision",
+      "breakpoints": true
     }
   ]
 }

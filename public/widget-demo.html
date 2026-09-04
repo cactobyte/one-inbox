@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>One Inbox widget — manual test harness</title>
+    <style>
+      body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 640px; }
+      code { background: #eee; padding: 0.15em 0.4em; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Widget demo (not shipped — manual test page only)</h1>
+    <p>
+      Stands in for a customer's website. Pass the seeded channel id and
+      token as query params:
+      <code>/widget-demo.html?channelId=...&amp;token=...</code>
+      — both are printed by <code>npm run db:seed</code>.
+    </p>
+    <div id="status"></div>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const channelId = params.get("channelId");
+      const token = params.get("token");
+      const status = document.getElementById("status");
+      if (!channelId || !token) {
+        status.textContent = "Missing ?channelId= and ?token= in the URL.";
+      } else {
+        status.textContent = `Loading widget for channel ${channelId}…`;
+        const script = document.createElement("script");
+        script.type = "module";
+        script.src = "/widget/index.js";
+        script.dataset.channelId = channelId;
+        script.dataset.token = token;
+        script.onload = () => (status.textContent = "Widget script loaded.");
+        document.body.appendChild(script);
+      }
+    </script>
+  </body>
+</html>

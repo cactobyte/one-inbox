@@ -130,3 +130,109 @@ backlog; not built now.
 Postgres. The dedupe unique index and every `account_id` filter run for
 real in CI. Rejected: a fake in-memory repository (would not prove Postgres
 enforces anything) and hitting Neon from CI (needs secrets, flaky).
+
+---
+
+## 2026-09-04 — Day 3: the website widget
+
+### Visitor identity: a random id in `localStorage`, scoped to the host page's origin
+
+Real decision, not silent: on first load the widget mints a UUID
+(`crypto.randomUUID()`) and stores it in `localStorage` under
+`oneinbox:visitor:<channelId>`, on whatever origin the widget is embedded
+on (the *customer's* site — the widget is not in an iframe, so it shares
+that page's storage, not ours). Reused on reload, so `platform_thread_id`
+(day 2) keeps mapping to the same conversation. Rejected:
+- **A cross-site cookie set by our API.** Would need `SameSite=None; Secure`
+  and survive third-party-cookie blocking (Safari ITP already blocks this;
+  Chrome is heading there) — actively hostile to a widget embedded on
+  someone else's domain.
+- **Asking the server to mint an id on first load.** Extra round trip before
+  the widget can even show a UI, for no benefit — the id is a thread key,
+  not a credential; the client can generate a fine one.
+- **Fingerprinting.** Unnecessary and worse for privacy for a problem
+  `localStorage` already solves.
+
+Trade-off accepted: private browsing / storage-blocking extensions mean
+`localStorage` can throw or silently not persist. `widget/src/identity.ts`
+wraps access (`safeStorage`) and falls back to an in-memory id for that
+page load only — the widget still works, it just won't thread across a
+reload in that case. No visitor-merge story if the same person clears
+storage and starts a new id — same limitation `contact` merging already
+has (day 2 decisions), noted again in backlog.
+
+### The channel token is public, not a secret, once it ships to a browser
+
+Day 2's `x-channel-token` is embedded directly in the widget's
+`data-token` attribute — anyone can read it from page source or dev tools.
+It was never meant to be confidential; its job is "which channel is this,
+roughly" (like a Stripe *publishable* key), not authorisation of a trusted
+party. No code changed for this — it's a naming of what was already true,
+so nobody reaches for it as a real secret later.
+
+### CORS added to the two widget-facing endpoints only
+
+The widget runs on an arbitrary customer origin and calls our API
+cross-origin — without CORS headers the browser blocks it outright, so
+this isn't optional for "embeddable via a single script tag" to actually
+work. Added `lib/cors.ts` (wildcard origin, since neither endpoint uses
+cookies — the channel token is the only credential) and applied it to
+the day 2 inbound POST (`OPTIONS` handler + headers on every response,
+CLAUDE.md's "directly blocks the current task" exception to no
+day-2-refactors) and the new SSE stream GET. Deliberately **not** applied
+to `/api/conversations/*` — those are cookie-authenticated and same-origin
+only; permissive CORS there would be a real hole, not a convenience.
+
+### SSE resume: `Last-Event-ID` is native; the server just has to honour it
+
+`EventSource` already remembers the last event `id` it saw and resends it
+as a `Last-Event-ID` header on every reconnect — no client-side reconnect
+loop was written. The server (`app/api/channels/[channelId]/stream/route.ts`)
+polls Postgres (no queue, no pub/sub — CLAUDE.md rules those out, and this
+is what "SSE" already meant per day 1) every 1.5s for messages after a
+cursor, and ends the stream cleanly every 5 minutes so a Vercel function
+timeout looks like an ordinary drop the client already knows how to
+recover from, not a special case. The cursor is `(message.created_at,
+message.id)` (`lib/inbox/cursor.ts`) — existing columns, no new table.
+
+Found by testing against real Postgres, not the pglite suite: `created_at`
+defaults to microsecond precision, but the driver hands back a JS `Date`
+(millisecond-only), so a cursor built from a row's own timestamp and
+round-tripped through `Date` compared as *less than* the row it came
+from — the stream resent the last message forever. Fixed by storing
+`message.created_at` at `timestamptz(3)` (migration `0002`), so the value
+Postgres stores and the value a `Date` round-trip produces are identical.
+pglite didn't reproduce this — see backlog for what that means for trusting
+it on timing-sensitive logic.
+
+### Widget shell: one script tag, `type="module"`, config read from `data-*`
+
+The embed is `<script type="module" src=".../widget/index.js"
+data-channel-id="…" data-token="…"></script>`. Module scripts don't set
+`document.currentScript` (a real, easy-to-miss browser gotcha), so config is
+read via `document.querySelector('script[data-channel-id][data-token]')`
+instead of relying on it; the API origin is derived from that same script's
+own resolved `src`, so the bundle is not hard-coded to one deployment.
+Source is compiled by plain `tsc` (`widget/tsconfig.json`, ES module
+output, no bundler — no new dependency) to `public/widget/*.js`, generated
+at build time (`predev`/`prebuild` run `build:widget`) and gitignored, not
+committed. TypeScript does not rewrite extensionless relative imports for
+real ESM output, so `widget/src/*.ts` imports its siblings with an explicit
+`.js` (e.g. `from "./ui.js"`) even though the source file is `.ts` — found
+the same way as the cursor bug, by actually loading the built output in a
+browser (Chrome dev tools showed 503s resolving `./identity`, `./ui`) —
+`tsc --noEmit` type-checks fine either way since it resolves against the
+`.ts` file, so this class of bug is invisible to typecheck and only shows
+up at runtime.
+
+### Message reconciliation: optimistic send + SSE echo, deduped by id
+
+The widget renders its own message immediately with the client-generated
+id it's about to POST (day 2's `messageId` = `platformMessageId`). When
+that same message arrives back over SSE — which it always does, since the
+stream is *all* messages on the conversation, not just agent replies — the
+widget matches by id and replaces the pending bubble in place rather than
+appending a second one. Chosen over only trusting the POST response,
+because the SSE stream is the single source of truth either way (task 4
+needs it for agent replies); reusing it for the visitor's own echo avoids
+a second, different "is this confirmed" code path.

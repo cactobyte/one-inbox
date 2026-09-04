@@ -12,7 +12,11 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "node --env-file=.env --experimental-strip-types db/seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:widget": "tsc -p widget/tsconfig.json",
+    "typecheck:widget": "tsc -p widget/tsconfig.json --noEmit",
+    "predev": "npm run build:widget",
+    "prebuild": "npm run build:widget"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
