@@ -7,6 +7,15 @@ import { decodeCursor, encodeCursor } from "./cursor";
 
 export type StreamMessage = {
   id: string;
+  /**
+   * The client's own id for a message it sent, if it has one — for the
+   * website channel this is the widget's `messageId`, echoed back as
+   * `platformMessageId` (day 2). The widget renders that id optimistically
+   * before this message exists in the database, so the stream must expose
+   * it: without it, reconciling the echo against the optimistic bubble by
+   * id is comparing the wrong two values and the message renders twice.
+   */
+  platformMessageId: string | null;
   direction: "inbound" | "outbound";
   body: string;
   attachments: unknown;
@@ -44,6 +53,7 @@ export async function fetchMessagesSince(
   const rows = await db
     .select({
       id: message.id,
+      platformMessageId: message.platformMessageId,
       direction: message.direction,
       body: message.body,
       attachments: message.attachments,

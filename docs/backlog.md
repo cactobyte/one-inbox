@@ -89,6 +89,29 @@ Things noticed during day 1 that are out of scope for day 1. Not prioritised.
   backoff, no adjustment for idle vs active conversations. Fine at the
   current scale; revisit if polling becomes a real DB load.
 
+## Agent inbox (noticed day 4)
+
+- **No live updates on the agent side.** `/inbox` and a conversation view
+  are ordinary page loads; a new inbound message from a customer doesn't
+  appear until the agent navigates or refreshes. The widget already proves
+  the SSE mechanism works both ways — this is "point a second, cookie
+  -authenticated consumer at it," not a new mechanism.
+- **Opening a conversation doesn't clear `unread_count`.** The badge on the
+  list only clears when something else (another inbound/outbound message)
+  recomputes it. Needs a small "mark read" write, deliberately left out to
+  avoid adding a write path not asked for this session.
+- **No "load older messages."** `listMessages` is properly paginated
+  (`cursor`/`nextCursor`, rule 4) but the conversation page only ever
+  renders the first page — there's no button wired to the next one yet.
+- **Conversation list has no assignment, filters, search, or status change
+  from the UI** — deliberately out of scope this session (see CLAUDE.md
+  "what not to do" / this session's explicit rules), not forgotten.
+- **One flaky test run.** `npm test` failed 2 of 44 once while a dev server,
+  several manual curl calls, and Chrome automation were all hitting the same
+  Neon connection concurrently; immediate re-runs were clean (twice). Never
+  reproduced in isolation. Worth a closer look if it shows up in CI, where
+  nothing else is competing for the connection.
+
 ## Product (later days, listed so they are not lost)
 
 - Channel adapters: LINE first (Thailand), then Messenger, Instagram,

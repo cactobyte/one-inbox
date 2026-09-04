@@ -101,12 +101,14 @@ button:disabled {
   cursor: default;
 }
 
-button.link {
+.link {
   background: transparent;
   color: inherit;
   border: none;
   padding: 0;
   text-decoration: underline;
+  cursor: pointer;
+  display: inline;
 }
 
 .error {
@@ -137,4 +139,126 @@ button.link {
   max-width: 26rem;
   text-align: center;
   gap: 0.75rem;
+}
+
+/* --- conversation list ---------------------------------------------------- */
+
+.conv-list {
+  list-style: none;
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+.conv-row {
+  display: block;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+.conv-row:hover {
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+.conv-row-top,
+.conv-row-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.conv-row-top {
+  font-weight: 600;
+}
+
+.conv-row-bottom {
+  margin-top: 0.15rem;
+  font-size: 0.85rem;
+}
+
+.conv-preview {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  flex: none;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--foreground);
+  color: var(--background);
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --- conversation view ------------------------------------------------------ */
+
+.conv-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 40rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1rem;
+  gap: 0.75rem;
+}
+
+.conv-messages {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bubble {
+  max-width: 75%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+}
+
+.bubble p {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bubble time {
+  display: block;
+  font-size: 0.7rem;
+  margin-top: 0.2rem;
+}
+
+.bubble.inbound {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.bubble.outbound {
+  align-self: flex-end;
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.reply-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.reply-form textarea {
+  flex: 1;
+  min-height: 3rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  resize: vertical;
 }

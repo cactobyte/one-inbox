@@ -106,7 +106,13 @@ export async function GET(request: Request, context: RouteContext) {
                   sseChunk(
                     "message",
                     {
-                      id: m.id,
+                      // Prefer the sender's own id (platformMessageId) so
+                      // the widget's optimistic bubble for its own message
+                      // reconciles instead of duplicating; only an agent
+                      // reply (no platformMessageId) falls back to the row
+                      // id, and the widget never had a pending copy of that
+                      // to reconcile against anyway.
+                      id: m.platformMessageId ?? m.id,
                       direction: m.direction,
                       body: m.body,
                       attachments: m.attachments,

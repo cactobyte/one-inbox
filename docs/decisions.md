@@ -225,6 +225,26 @@ browser (Chrome dev tools showed 503s resolving `./identity`, `./ui`) —
 `.ts` file, so this class of bug is invisible to typecheck and only shows
 up at runtime.
 
+### Message identity bug: the widget echo used the wrong id
+
+Found by the same real-browser test as above, one layer deeper: the stream
+sent each message's `id` as the database row id, but the widget's
+optimistic bubble for its own send is keyed by the *client-generated*
+`messageId` (day 2's `platformMessageId`) — a different UUID. So the
+"reconciliation" this file already describes below silently never matched
+for a visitor's own messages: the DB id never equals the client id, so
+`upsert` always appended instead of replacing, and every visitor message
+that survived a reconnect rendered twice. Fixed by having the stream send
+`platformMessageId ?? id` as the message identity — an agent reply has no
+`platformMessageId` (nothing client-generated exists for it), which is
+exactly the case where falling back to the row id is correct: the widget
+never had a pending copy of an agent's message to reconcile against. Added
+a test (`lib/inbox/stream.test.ts`) asserting the stream exposes
+`platformMessageId` distinctly per direction, so this can't silently regress
+the way it silently shipped the first time — a Vitest suite with no browser
+in the loop had no way to catch a bug that only exists in what two
+different parts of the system call "the same message's id".
+
 ### Message reconciliation: optimistic send + SSE echo, deduped by id
 
 The widget renders its own message immediately with the client-generated
@@ -236,3 +256,65 @@ appending a second one. Chosen over only trusting the POST response,
 because the SSE stream is the single source of truth either way (task 4
 needs it for agent replies); reusing it for the visitor's own echo avoids
 a second, different "is this confirmed" code path.
+
+---
+
+## 2026-09-05 — Day 4: agent inbox
+
+### Account scoping lives in the query functions, not the pages or the UI
+
+`lib/inbox/queries.ts` (`listConversations`, `getOwnedConversation`,
+`listMessages`) all take `accountId` as a required argument and put it in
+the `WHERE` clause themselves — the same shape day 2's `ingestInbound` and
+`sendReply` already use. A conversation id from another account is not
+filtered out of a bigger result or hidden by the page; the query never
+returns it, and `getOwnedConversation` throws `NotFoundError` rather than
+returning `null` so a foreign id and a made-up id are indistinguishable to
+the caller. Every route handler and every page is a thin caller of these —
+there is exactly one place that decides whose rows these are.
+
+### List + detail are two pages, not a split-pane app
+
+`/inbox` (list) and `/inbox/[conversationId]` (thread + reply) are separate
+server-rendered routes with an ordinary link between them, not a client-side
+split view sharing state. Slower to click through, far less code, and nothing
+in "basic UI only — list + conversation pane" asked for a single-page app.
+Reconsider if agents complain about the round trip.
+
+### No live updates on the agent side (yet)
+
+The widget gets SSE (day 3); the inbox list and conversation view do not —
+opening `/inbox` or a conversation is an ordinary page load, and a reply
+lands via `router.refresh()` after the POST resolves, not a stream. Task 10
+only requires the reply reach the *widget* live; teaching the agent UI to
+watch its own stream is a straightforward but real addition (a second
+`EventSource` consumer, a session-authenticated variant of the day 3 route)
+that wasn't asked for here. In backlog.
+
+### Reply form calls the day 2 endpoint over HTTP, not a new server action
+
+`ReplyForm` (client component) `fetch()`s `POST
+/api/conversations/:id/messages` — the exact endpoint day 2 built and day 3
+already exercises no differently than the widget does. Rejected: a server
+action calling `sendReply` directly. It would be one function call shorter,
+but it's a second entry point into the same behaviour with its own request
+lifecycle, and "do not build a new send path" reads most safely as "call the
+one that already exists," not "call the function underneath it again from
+somewhere new."
+
+### Pagination cursor reuses day 3's codec, not a new one
+
+`listConversations` and `listMessages` are keyset-paginated on the same
+`(timestamp, id)` shape day 3's SSE resume uses, importing `encodeCursor` /
+`decodeCursor` from `lib/inbox/cursor.ts` (day 3) — same problem, same
+answer, going the other direction (newest-first, `<` instead of `>`). No
+change to `cursor.ts` itself was needed.
+
+### Last-message preview: a correlated subquery, not a denormalised column
+
+`listConversations`'s preview text comes from a scalar subquery
+(`select body from message where conversation_id = ... order by created_at
+desc limit 1`) per row, not a `last_message_body` column kept in sync on
+every write. It costs one index-backed lookup per row on a page of ~30
+conversations — trivial at this scale — and there is nothing to keep
+consistent by hand. Revisit only if the list query shows up as slow.

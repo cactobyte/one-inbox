@@ -5,8 +5,9 @@ import { websiteAdapter } from "@/lib/channels/website/adapter";
 
 import { decodeCursor, encodeCursor } from "./cursor";
 import { ingestInbound } from "./ingest";
+import { sendReply } from "./reply";
 import { fetchMessagesSince } from "./stream";
-import { makeAccount, makeChannel, makeTestDb, type TestDb } from "../../test/db";
+import { makeAccount, makeAgent, makeChannel, makeTestDb, type TestDb } from "../../test/db";
 
 let db: TestDb;
 let appDb: Awaited<ReturnType<typeof makeTestDb>>["appDb"];
@@ -45,6 +46,27 @@ describe("cursor", () => {
     expect(decodeCursor("not-a-real-cursor")).toBeNull();
     expect(decodeCursor(null)).toBeNull();
     expect(decodeCursor(undefined)).toBeNull();
+  });
+});
+
+describe("fetchMessagesSince — message identity for widget reconciliation", () => {
+  // Regression: a widget renders its own send optimistically under the
+  // client-generated id it POSTed (day 2's platformMessageId). If the
+  // stream exposes only the DB row id for that same message, the widget
+  // can't tell "this is the message I already showed" from "this is new"
+  // and renders it a second time. Caught by loading the real widget in a
+  // browser, not by this suite originally — this test is what should have.
+  it("an inbound message keeps its platformMessageId (the sender's own id)", async () => {
+    const { messages } = await fetchMessagesSince(appDb, conversationId, null);
+    expect(messages[0].platformMessageId).toBe("seed-1");
+  });
+
+  it("an agent reply (no client-generated id) has a null platformMessageId", async () => {
+    const agent = await makeAgent(db, accountId);
+    const before = await fetchMessagesSince(appDb, conversationId, null);
+    await sendReply(appDb, agent, conversationId, { body: "reply" });
+    const after = await fetchMessagesSince(appDb, conversationId, before.nextCursor);
+    expect(after.messages[0]).toMatchObject({ body: "reply", platformMessageId: null });
   });
 });
 

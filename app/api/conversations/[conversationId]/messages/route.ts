@@ -1,10 +1,42 @@
 import { getCurrentAgent } from "@/lib/auth";
 import { db } from "@/db";
 import { NotFoundError, ValidationError } from "@/lib/inbox/errors";
+import { listMessages } from "@/lib/inbox/queries";
 import { sendReply } from "@/lib/inbox/reply";
 import { jsonError, jsonOk } from "@/lib/http";
 
 type RouteContext = { params: Promise<{ conversationId: string }> };
+
+/**
+ * List messages in a conversation, oldest first. Scoped to the agent's
+ * account at the query layer (lib/inbox/queries.ts): a conversation id from
+ * another account 404s, it does not come back as an empty list. Paginated
+ * per CLAUDE.md rule 4.
+ */
+export async function GET(request: Request, context: RouteContext) {
+  const agent = await getCurrentAgent();
+  if (!agent) {
+    return jsonError("Sign in required", 401, "unauthorised");
+  }
+
+  const { conversationId } = await context.params;
+  const cursorToken = new URL(request.url).searchParams.get("cursor");
+
+  try {
+    const { items, nextCursor } = await listMessages(
+      db,
+      agent.accountId,
+      conversationId,
+      { cursorToken },
+    );
+    return jsonOk({ items, nextCursor });
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      return jsonError(error.message, 404, "conversation_not_found");
+    }
+    throw error;
+  }
+}
 
 /**
  * Post an agent reply into a conversation. The reply is delivered through the
