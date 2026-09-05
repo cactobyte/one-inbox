@@ -31,7 +31,7 @@ const accountName = process.env.SEED_ACCOUNT_NAME ?? "Demo Co";
 const email = (process.env.SEED_AGENT_EMAIL ?? "owner@example.com")
   .trim()
   .toLowerCase();
-const password = process.env.SEED_AGENT_PASSWORD ?? "changeme123";
+const password = process.env.SEED_AGENT_PASSWORD ?? "OneInbox-demo-2026";
 
 const existing = await db
   .select({ id: agent.id, accountId: agent.accountId })
