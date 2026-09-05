@@ -31,7 +31,16 @@ const accountName = process.env.SEED_ACCOUNT_NAME ?? "Demo Co";
 const email = (process.env.SEED_AGENT_EMAIL ?? "owner@example.com")
   .trim()
   .toLowerCase();
-const password = process.env.SEED_AGENT_PASSWORD ?? "OneInbox-demo-2026";
+// No default: a hardcoded password in a public repo is a published
+// credential (see docs/decisions.md, day 5). The caller must supply one.
+const password = process.env.SEED_AGENT_PASSWORD;
+if (!password) {
+  console.error(
+    "SEED_AGENT_PASSWORD is not set. Choose a password and pass it, e.g.\n" +
+      "  SEED_AGENT_PASSWORD=... node --env-file=.env --experimental-strip-types db/seed.ts",
+  );
+  process.exit(1);
+}
 
 const existing = await db
   .select({ id: agent.id, accountId: agent.accountId })

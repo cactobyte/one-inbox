@@ -60,17 +60,24 @@ usable demo account and **was not re-seeded**:
 
 ## 3. Seeded password
 
-`owner@example.com` was `changeme123` — a default visible in
-`db/seed.ts` in a public repo. Changed to a non-default value:
+`owner@example.com` was `changeme123` — a default visible in `db/seed.ts`
+in a public repo, i.e. a published credential the moment the deployment is
+public.
 
-- Applied **directly to the production Neon database** (the deploy shares
-  that one database — there is no separate prod DB), verified by hashing
-  the new password, writing it, reading it back, and confirming the new
-  password verifies and the old one is rejected.
-- Also changed the default in `db/seed.ts` so a fresh `db:seed` is safe.
-  Still overridable with `SEED_AGENT_PASSWORD`.
-
-The current demo password is in `docs/demo.md`.
+- Set to a fresh non-default value, applied **directly to the production
+  Neon database** (the deploy shares that one database — there is no
+  separate prod DB), verified by hashing it, writing it, reading it back,
+  and confirming the new password verifies and the old one is rejected.
+- `db/seed.ts` no longer has a hardcoded default at all — it now requires
+  `SEED_AGENT_PASSWORD` and exits with an error if it's missing, the same
+  way it already treats `DATABASE_URL`. Swapping one guessable string in
+  public source for another isn't the fix; not having one is.
+- The password itself is **not committed** — not in `docs/demo.md`, not
+  anywhere in the repo. It's shared out of band. (A first pass did briefly
+  put it in `docs/demo.md`; that commit's value was then rotated out and
+  the file now carries only a placeholder. The rotated-out value sits in
+  git history — harmless for a throwaway demo credential on an account with
+  no real data, but noted here rather than hidden.)
 
 ## 4. Embed script
 
@@ -142,16 +149,15 @@ None. Day 5 changed no application logic.
 ## Not done (out of scope, in `docs/backlog.md`)
 
 - No separate staging environment — prod and local share one Neon database.
-- The older demo conversation still has a one-word "Yo" test reply; left
-  alone rather than editing production data unasked.
+- Three scruffy test conversations on the demo account; left alone rather
+  than editing production data unasked. The runbook starts a fresh one.
 - Automated transient-drop reconnect test (see step 6).
-- `db/seed.ts` prints the password to stdout — fine locally, would leak into
-  build logs if ever run in CI.
+- History rewrite for the rotated-out password in commit `2c86e30` — not
+  worth it for a data-free demo account.
 
 ## Check first
 
-- `docs/demo.md` — the runbook. The URLs, the login, and the embed snippet
-  are all live values; if the password is rotated, that file is the place
-  to update.
+- `docs/demo.md` — the runbook. URLs and the embed snippet are live values.
+  The password is deliberately not in it; it's shared out of band.
 - `docs/decisions.md` day 5 section — the deployment-protection call and why
   it's the right one.

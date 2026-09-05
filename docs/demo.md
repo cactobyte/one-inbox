@@ -27,7 +27,10 @@ Messenger, WhatsApp and the rest without changing anything the agent sees.
 2. **Right window — sign in as the agent:**
    - Go to **https://one-inbox-xi.vercel.app/login**
    - Email: `owner@example.com`
-   - Password: `OneInbox-demo-2026`
+   - Password: **not written here on purpose** — this file is in a public
+     repo. Get it from whoever set up the deployment (it was last set on
+     day 5). If you have database access you can reset it with
+     `SEED_AGENT_PASSWORD=... npm run db:seed`.
    - You land on the inbox. Leave it here.
 
 3. **Left window — open the customer's website with the chat widget:**
@@ -159,7 +162,7 @@ If you want to demo from a *real* separate page instead of the hosted
 | Question | Answer |
 | --- | --- |
 | URL of the app | `https://one-inbox-xi.vercel.app` |
-| Agent login | `owner@example.com` / `OneInbox-demo-2026` |
+| Agent login | `owner@example.com` — password held separately (not in this repo) |
 | How does the customer's chat update live? | A Server-Sent Events connection (plain HTTP streaming). It reconnects on its own if dropped and resumes from the last message it saw. |
 | Is there a mobile app / more channels / assignment / search? | Not yet. Week one is the website widget and a shared inbox. The data model and inbox are built so channels and team features slot in without a rewrite. |
 | Where's the data? | One Postgres database (Neon), one Next.js app on Vercel. Nothing else. |

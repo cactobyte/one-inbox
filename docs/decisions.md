@@ -341,16 +341,22 @@ a guessable login was academic; without it, it's a real exposure. If a
 non-public staging URL is wanted later, the right move is a Vercel preview
 deployment with protection left on, not protection on production.
 
-### Seeded demo password moved off the known default
+### Seeded demo password: no hardcoded default, value not committed
 
 `db/seed.ts` created `owner@example.com` with `changeme123` — fine when the
 only reader was localhost, not fine once the deployment is public and the
-seed script is in a public repo. Changed to a non-default value, applied
-directly to the production Neon database (the running deploy shares that
-one database — there is no separate prod DB to migrate or seed) and to the
-seed script's default so a fresh `db:seed` is safe too. Still overridable
-with `SEED_AGENT_PASSWORD`. Proper auth hardening (rotation, rate limiting,
-lockout) stays in the backlog; this was just removing a published credential.
+seed script is in a public repo. The fix isn't to pick a different literal
+(that's still a published credential): `db/seed.ts` now *requires*
+`SEED_AGENT_PASSWORD` and exits if it's unset, the same way it already
+treats `DATABASE_URL`. A fresh non-default value was set directly on the
+production Neon database (the running deploy shares that one database —
+there is no separate prod DB to migrate or seed) and is shared out of band,
+not written into any tracked file — `docs/demo.md` carries a placeholder.
+(A first pass did commit the value to `docs/demo.md`; it was rotated out
+immediately, but the superseded value remains in git history — acceptable
+for a throwaway credential on a data-free account, noted in the backlog.)
+Proper auth hardening (rotation, rate limiting, lockout) stays in the
+backlog; this was just removing a published credential.
 
 ### Production env / DB config: verified, nothing to change
 

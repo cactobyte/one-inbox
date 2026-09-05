@@ -122,20 +122,23 @@ Things noticed during day 1 that are out of scope for day 1. Not prioritised.
 - **Vercel Authentication is now off entirely.** If a protected staging URL
   is ever wanted, use a preview deployment with protection on rather than
   toggling it on production.
-- **Seeded demo conversation is slightly scruffy.** The older thread on the
-  demo account still has a one-word "Yo" agent reply from day 4 testing. A
-  10-second `update message set body=...` would tidy it; left alone to
-  avoid editing production data without being asked.
+- **Seeded demo conversation is slightly scruffy.** The demo account now
+  has three test conversations from day 3–5 (one with a one-word "Yo" agent
+  reply, one mid-sentence "Testing the hosted demo page…"). An `update
+  message set body=...` / status change would tidy them; left alone to
+  avoid editing production data without being asked. The runbook works
+  around it by starting a fresh conversation.
+- **The rotated-out demo password is in git history.** Commit `2c86e30`
+  briefly had the (now-replaced) password in `docs/demo.md`. Harmless for a
+  throwaway credential on a data-free account; a history rewrite isn't
+  worth it, but if the account ever holds anything real, rotate again and
+  don't put the value in a tracked file.
 - **SSE transient-drop reconnect is unverified end-to-end on live.** Server
   `Last-Event-ID` resume is proven and native `EventSource` reconnect works
   on a full reload, but "network blips for 5s, page auto-recovers" was not
   reproducible with the available tooling. Worth a manual DevTools-offline
   pass, or a Playwright test with `context.setOffline(true)`, before
   trusting it in front of an audience on flaky venue wifi.
-- **`db/seed.ts` prints the plaintext password to stdout.** Convenient
-  locally, but means the demo password lands in Vercel/CI build logs if the
-  seed is ever run there. Not run in CI today; keep it that way, or make it
-  print only when `process.stdout.isTTY`.
 - **Neon `Pool` still never `end()`s in serverless** (already noted day 2) —
   no exhaustion seen under the light live smoke test, but nothing has
   actually load-tested it.
