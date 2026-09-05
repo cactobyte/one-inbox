@@ -112,6 +112,34 @@ Things noticed during day 1 that are out of scope for day 1. Not prioritised.
   reproduced in isolation. Worth a closer look if it shows up in CI, where
   nothing else is competing for the connection.
 
+## Production / deploy (noticed day 5)
+
+- **No separate staging environment.** Production and local development
+  point at the same Neon database, and `changeme123` test data (the "Yo"
+  reply, the first "ship to Chiang Mai" thread) is live in it. Fine for a
+  week-one demo; before real customers there needs to be a Neon branch (or
+  a second project) for production, with previews on their own branch.
+- **Vercel Authentication is now off entirely.** If a protected staging URL
+  is ever wanted, use a preview deployment with protection on rather than
+  toggling it on production.
+- **Seeded demo conversation is slightly scruffy.** The older thread on the
+  demo account still has a one-word "Yo" agent reply from day 4 testing. A
+  10-second `update message set body=...` would tidy it; left alone to
+  avoid editing production data without being asked.
+- **SSE transient-drop reconnect is unverified end-to-end on live.** Server
+  `Last-Event-ID` resume is proven and native `EventSource` reconnect works
+  on a full reload, but "network blips for 5s, page auto-recovers" was not
+  reproducible with the available tooling. Worth a manual DevTools-offline
+  pass, or a Playwright test with `context.setOffline(true)`, before
+  trusting it in front of an audience on flaky venue wifi.
+- **`db/seed.ts` prints the plaintext password to stdout.** Convenient
+  locally, but means the demo password lands in Vercel/CI build logs if the
+  seed is ever run there. Not run in CI today; keep it that way, or make it
+  print only when `process.stdout.isTTY`.
+- **Neon `Pool` still never `end()`s in serverless** (already noted day 2) —
+  no exhaustion seen under the light live smoke test, but nothing has
+  actually load-tested it.
+
 ## Product (later days, listed so they are not lost)
 
 - Channel adapters: LINE first (Thailand), then Messenger, Instagram,

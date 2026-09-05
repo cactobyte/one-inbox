@@ -318,3 +318,66 @@ desc limit 1`) per row, not a `last_message_body` column kept in sync on
 every write. It costs one index-backed lookup per row on a page of ~30
 conversations — trivial at this scale — and there is nothing to keep
 consistent by hand. Revisit only if the list query shows up as slow.
+
+---
+
+## 2026-09-06 — Day 5: production / demo readiness
+
+Day 5 changed no application code (only the seed script's default password
+string). Everything below is about the live Vercel deployment.
+
+### Vercel Authentication (deployment protection) was on — turned off
+
+The project shipped with Vercel's "Standard Protection" (SSO / Vercel
+Authentication) enabled for every `*.vercel.app` URL. That put a Vercel
+login wall in front of the whole app: a non-technical audience opening the
+URL couldn't get in, and — worse for an embeddable widget — every
+cross-origin call from a customer page (`POST /inbound`, the SSE stream)
+came back `401` from the protection layer before it ever reached our code.
+Turned off (`ssoProtection: { enabled: false }`). The app is now publicly
+reachable, which is the whole point of a website widget. This is also why
+the seeded password had to change the same day (below) — with the wall up,
+a guessable login was academic; without it, it's a real exposure. If a
+non-public staging URL is wanted later, the right move is a Vercel preview
+deployment with protection left on, not protection on production.
+
+### Seeded demo password moved off the known default
+
+`db/seed.ts` created `owner@example.com` with `changeme123` — fine when the
+only reader was localhost, not fine once the deployment is public and the
+seed script is in a public repo. Changed to a non-default value, applied
+directly to the production Neon database (the running deploy shares that
+one database — there is no separate prod DB to migrate or seed) and to the
+seed script's default so a fresh `db:seed` is safe too. Still overridable
+with `SEED_AGENT_PASSWORD`. Proper auth hardening (rotation, rate limiting,
+lockout) stays in the backlog; this was just removing a published credential.
+
+### Production env / DB config: verified, nothing to change
+
+`DATABASE_URL` and `SESSION_SECRET` are set on Vercel and work: login
+against production succeeds (session cookie signs and verifies →
+`SESSION_SECRET` good), `/inbox` and the inbound webhook both read/write
+the production Neon database (→ `DATABASE_URL` good). The Neon serverless
+`Pool` held up across many requests during the live smoke test — no
+connection-exhaustion symptoms at this volume. The session cookie is
+`Secure` in production (`NODE_ENV === "production"`) and `SameSite=Lax`,
+which is correct for the same-origin agent login; no cookie-domain or
+cross-site cookie config was needed because the widget deliberately doesn't
+use cookies (day 3).
+
+### SSE reconnect on the live deployment: resume verified server-side
+
+The day 3 mechanism is (a) native `EventSource` auto-reconnect on a dropped
+connection, (b) the server honouring the `Last-Event-ID` header to resume
+from exactly where the client left off. Against the live deployment: a
+fresh stream connection replays the conversation and every event carries an
+`id:` cursor; reconnecting with `Last-Event-ID` set to the last cursor
+returns **zero** message events — no replay, no duplicates, no drops. A
+full widget reload mid-conversation (the harder path: brand-new connection,
+full history replayed once, deduped by id) also comes back clean with the
+thread intact. The one thing not exercised end-to-end is a *transient*
+network blip triggering native `EventSource` retry in the page — the
+browser-automation tools have no offline toggle, and `window.stop()` is a
+permanent close (readyState `CLOSED`, no retry — the widget correctly shows
+its "disconnected" dot), not a recoverable error. Both halves of the
+mechanism are verified independently; the automated "pull the cable" is not.
