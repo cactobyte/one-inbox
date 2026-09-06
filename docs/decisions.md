@@ -1,389 +1,234 @@
 # Decisions
 
-One or two lines per entry: what was chosen, what was rejected, why. Append
-only; do not rewrite history.
+Architecture and design calls, with what was rejected and why. Two to four
+lines each. Append a new entry per milestone; don't rewrite old ones.
+
+Bug lessons worth keeping are marked **Lesson**. The full write-ups are in
+git history (this file used to carry them at length).
 
 ---
 
-## 2026-09-03 — Day 1 foundations
+## 2026-09-03 · Foundations
 
-### Database: Postgres (Neon)
+**Database — Postgres (Neon).** The model is relational with hard integrity
+needs: `account_id` on every row, foreign keys, and a uniqueness constraint
+that blocks duplicate webhook deliveries — all enforced in the database, not
+app code. Neon because it is serverless (matches Vercel) and branchable (a DB
+branch per preview later). Rejected: a document store (integrity moves to app
+code) and SQLite (no serverless story, weak concurrent-writer story).
 
-Chosen. The data model is relational with hard integrity requirements —
-`account_id` scoping on every row, foreign keys between conversation /
-message / event, and a uniqueness constraint that stops duplicate webhook
-deliveries. Postgres enforces all of that in the database rather than in app
-code. Neon specifically because it is serverless (scales to zero, matches the
-Vercel deploy) and branchable (a database branch per preview deploy later).
-Rejected: a document store (would push referential integrity and the
-dedupe constraint into application code) and SQLite (no serverless story,
-weak concurrent-writer story for a shared team inbox).
+**ORM — Drizzle.** TypeScript-first schema with real inferred row types;
+SQL-first migrations generated as plain `.sql` and checked into
+`db/migrations`, so what runs against production is reviewable. Rejected:
+Prisma (extra engine binary, opaque migrations); hand-written SQL (no type
+link, and the model changes every month).
 
-### ORM / migrations: Drizzle
+**Real-time — Server-Sent Events, not WebSockets.** Inbox traffic is almost
+entirely server → client; the rare client → server events already go through
+POST. SSE is plain HTTP (passes proxies, `EventSource` auto-reconnects, fits
+Vercel streaming). WebSockets on Vercel need a separate always-on service,
+breaking "one Next.js app + one Postgres". Per CLAUDE.md, not to be revisited.
 
-Chosen. TypeScript-first schema that produces real inferred row types, and
-SQL-first migrations that are generated as plain `.sql` files and checked
-into the repo (`db/migrations`), so what runs against production is
-reviewable in a PR. Rejected: Prisma (extra engine binary, migration files
-are less transparent) and hand-written SQL with no type link to the app
-(the model changes every month as channels are added — the types must track
-it automatically).
+**Sessions — stateless HMAC-signed cookie, no table.** A `session` table
+would be an eighth table (needs sign-off). Cookie is `{ sub: agentId, exp }`
+signed with `SESSION_SECRET`, 7-day fixed expiry. Trade-off: revocation is
+coarse — rotating the secret drops everyone. Per-session revocation: backlog.
 
-### Real-time transport: Server-Sent Events, not WebSockets
+**Password hashing — Node `crypto.scrypt`.** Memory-hard, standard library,
+no native build, no new dependency. Rejected: `bcryptjs` (extra dep),
+`argon2` (native build, painful on Windows + Vercel).
 
-Chosen: SSE. Inbox real-time traffic is almost entirely server → client
-(new inbound message, assignment changed, conversation resolved by a
-teammate, tag added). The rare client → server events (send a reply, claim a
-conversation) already go through normal POST / server actions and do not
-need a socket. SSE is plain HTTP: it passes through corporate proxies and
-load balancers untouched, the browser `EventSource` reconnects on its own,
-and it works within Vercel's streaming-response model. WebSockets on Vercel
-need a separate always-on service to hold the connections, which breaks the
-"one Next.js app and one Postgres database" rule for week one. Trade-off
-accepted: HTTP/1.1 caps a browser at ~6 concurrent connections per origin;
-Vercel serves over HTTP/2 where that limit does not apply. Per CLAUDE.md
-this is not to be revisited.
+**Enum-like columns — `text` + a TypeScript union, not a Postgres enum.**
+`channel.type`, `event.type`, conversation status. A new channel ships
+monthly; widening a real enum is a migration every time, a text column is
+not. Integrity that matters (FKs, the dedupe constraint) is still in the DB.
 
-### Sessions: signed cookie, no session table
-
-The seven-table data model has no `session` table and adding an eighth
-needs sign-off. Agent sessions are therefore a stateless HMAC-signed cookie
-(`{ agentId, exp }` signed with `SESSION_SECRET`). Rejected: adding a
-`session` table (out of scope for day 1). Trade-off: revocation is coarse —
-rotating `SESSION_SECRET` invalidates every session at once. Per-session
-revocation is in `backlog.md`.
-
-### Password hashing: Node `scrypt`
-
-Chosen: the standard-library `crypto.scrypt`. It is a memory-hard KDF, needs
-no native build (bcrypt) and no new dependency. Rejected: `bcryptjs` (extra
-dep), `argon2` (native build, painful on Windows dev + Vercel).
-
-### Channel / status columns: text + TypeScript union, not Postgres enum
-
-`channel.type`, `event.type` and the conversation status are `text` columns
-with a narrowing TypeScript union type. A new channel ships roughly monthly;
-widening a real Postgres enum is a migration every time, a plain text column
-is not. Integrity that matters (foreign keys, the dedupe constraint) is
-still enforced in the database.
+**Schema shape.** Every non-`account` table has
+`account_id NOT NULL REFERENCES account(id) ON DELETE CASCADE`.
+`message` has `UNIQUE(channel_id, platform_message_id)` (nullable id, NULLs
+distinct, so unacked outbound is fine). `event` is insert-only.
 
 ---
 
-## 2026-09-03 — Day 2: channel adapters and message flow
+## 2026-09-03 · Channel adapters and message flow
 
-### Adapter interface: exactly two operations, no channel identity in the model
+**Adapter interface — exactly two methods.** `parseInbound(payload, config)`
+and `sendOutbound(message, config)`, nothing else. The normalised model names
+no channel; person and thread are opaque platform-id strings the core stores
+but never interprets. Signature verification, retry and echo-filtering are
+deliberately not on the interface. Rejected: a `verify()` / `handleWebhook()`
+method (makes "exactly two things" false, leaks transport into every adapter).
 
-`ChannelAdapter` is `parseInbound(payload, config)` and
-`sendOutbound(message, config)` — nothing else. The normalised
-`InboundMessage` / `OutboundMessage` name no channel; the person and the
-thread are opaque platform-id strings the core stores but never interprets.
-Signature verification, retry, echo-filtering are deliberately *not* on the
-interface. Rejected: putting a `verify()` / `handleWebhook()` method on the
-adapter — it would make "exactly two things" false and leak transport
-concerns into every future adapter.
+**Platform identity — columns, not a mapping table.**
+`contact.platform_contact_id` (unique per account) and
+`conversation.platform_thread_id` (unique per channel), both nullable. A join
+table would be an eighth table. Trade-off: a contact is tied to whichever
+account first saw that platform id; cross-channel identity and merge are
+unsolved (backlog).
 
-### Platform identity lives on `contact` / `conversation`, not a mapping table
+**DB driver — Neon serverless `Pool` (WebSocket), not `neon-http`.**
+`neon-http` has no interactive transactions; the inbound path writes contact
++ conversation + message + event atomically. Build-without-`DATABASE_URL` and
+lazy client creation are kept.
 
-To find-or-create the contact and conversation for an inbound message we need
-to map (platform person, platform thread) → rows. The clean design is a
-join table (contact ↔ channel with a source id); that would be an eighth
-table. Instead: `contact.platform_contact_id` (unique per account) and
-`conversation.platform_thread_id` (unique per channel), both nullable.
-Trade-off: a contact is currently tied to whichever account first saw that
-platform id; cross-channel identity and merge are unsolved (backlog).
-
-### DB driver: switched to the Neon WebSocket pool
-
-`neon-http` has no interactive transactions. The inbound path must write
-contact + conversation + message + event atomically, so `db/index.ts` now
-uses `drizzle-orm/neon-serverless` with a `Pool`. Day 1's questions.md
-anticipated this. Lazy creation and build-without-DATABASE_URL are kept.
-
-### Idempotency: unique index first, race caught second
-
-Dedupe is `UNIQUE(channel_id, platform_message_id)` from day 1. `ingestInbound`
+**Idempotency — unique index first, race caught second.** `ingestInbound`
 checks for the existing message inside the transaction and returns
-`status: "duplicate"`; if two identical webhooks race, the loser's `INSERT`
-hits the constraint, the transaction rolls back, and the caller re-reads the
-committed row and still returns `duplicate`. No new message, no new event.
+`status: "duplicate"`. If two identical webhooks race, the loser's `INSERT`
+hits `UNIQUE(channel_id, platform_message_id)`, the transaction rolls back,
+the caller re-reads the committed row and still returns `duplicate`.
 
-### Website adapter: one visitor is one thread; `sendOutbound` is a real no-op
+**Website adapter — one visitor is one thread; `sendOutbound` is a real
+no-op.** `thread.platformId = visitorId` (the widget doesn't track threads).
+`sendOutbound` calls no API and acks with a null platform message id — the
+widget *pulls* outbound messages through the real-time layer. This is how a
+pull channel actually behaves, not a stub. Multi-thread: backlog.
 
-v1 maps `thread.platformId = visitorId` — the widget doesn't track threads.
-`sendOutbound` calls no API: the widget has no inbound endpoint, it *pulls*
-outbound messages through the real-time layer (day 3+). It acknowledges with
-a null platform message id. This is the actual behaviour of a pull channel,
-not a stub. Multi-thread support is in the backlog.
+**Inbound webhook auth — shared per-channel token, for now.** The endpoint
+checks `x-channel-token` against `channel.config.inboundToken` (constant
+time). Real platforms sign webhooks per-platform (LINE: HMAC-SHA256 of the
+body; Messenger: `X-Hub-Signature-256`); that needs a home before LINE lands
+— likely an adapter capability or an endpoint strategy keyed on channel type.
+Backlog.
 
-### Inbound webhook auth: shared per-channel token, for now
-
-The endpoint checks `x-channel-token` against `channel.config.inboundToken`
-(constant-time). Real platforms sign webhooks differently (LINE: HMAC-SHA256
-of the body; Messenger: `X-Hub-Signature-256`). That per-platform
-verification will need a home when LINE lands — likely a third adapter
-capability or an endpoint-level strategy keyed on channel type. Noted in
-backlog; not built now.
-
-### Tests: pglite, not mocks
-
-`@electric-sql/pglite` (dev dependency, approved) gives an in-process real
-Postgres. The dedupe unique index and every `account_id` filter run for
-real in CI. Rejected: a fake in-memory repository (would not prove Postgres
-enforces anything) and hitting Neon from CI (needs secrets, flaky).
+**Tests — pglite, not mocks.** `@electric-sql/pglite` (dev dep) gives an
+in-process real Postgres, so the dedupe index and every `account_id` filter
+run for real in CI. Rejected: a fake in-memory repository (proves nothing);
+hitting Neon from CI (needs secrets, flaky).
 
 ---
 
-## 2026-09-04 — Day 3: the website widget
+## 2026-09-04 · The website widget
 
-### Visitor identity: a random id in `localStorage`, scoped to the host page's origin
+**Visitor identity — a random UUID in `localStorage`.** Minted on first load,
+stored under `oneinbox:visitor:<channelId>` on the host page's origin (the
+widget is not iframed). Reused on reload so `platform_thread_id` keeps
+mapping to the same conversation. Rejected: a cross-site cookie (ITP already
+blocks it, Chrome is heading there); a server-minted id (extra round trip for
+a value that is a thread key, not a credential); fingerprinting (worse for
+privacy, unnecessary). Trade-off: private mode / storage-blocking falls back
+to an in-memory id for that page load; no visitor-merge story (backlog).
 
-Real decision, not silent: on first load the widget mints a UUID
-(`crypto.randomUUID()`) and stores it in `localStorage` under
-`oneinbox:visitor:<channelId>`, on whatever origin the widget is embedded
-on (the *customer's* site — the widget is not in an iframe, so it shares
-that page's storage, not ours). Reused on reload, so `platform_thread_id`
-(day 2) keeps mapping to the same conversation. Rejected:
-- **A cross-site cookie set by our API.** Would need `SameSite=None; Secure`
-  and survive third-party-cookie blocking (Safari ITP already blocks this;
-  Chrome is heading there) — actively hostile to a widget embedded on
-  someone else's domain.
-- **Asking the server to mint an id on first load.** Extra round trip before
-  the widget can even show a UI, for no benefit — the id is a thread key,
-  not a credential; the client can generate a fine one.
-- **Fingerprinting.** Unnecessary and worse for privacy for a problem
-  `localStorage` already solves.
+**The channel token is public once it ships in a browser.** It sits in the
+widget's `data-token` attribute — like a Stripe *publishable* key. Its job is
+"which channel", not authorisation. No code changed; this is a naming so
+nobody later reaches for it as a real secret.
 
-Trade-off accepted: private browsing / storage-blocking extensions mean
-`localStorage` can throw or silently not persist. `widget/src/identity.ts`
-wraps access (`safeStorage`) and falls back to an in-memory id for that
-page load only — the widget still works, it just won't thread across a
-reload in that case. No visitor-merge story if the same person clears
-storage and starts a new id — same limitation `contact` merging already
-has (day 2 decisions), noted again in backlog.
+**CORS — the two widget-facing endpoints only.** `lib/cors.ts`, wildcard
+origin (neither endpoint uses cookies — the channel token is the only
+credential), on the inbound POST and the SSE stream GET. Deliberately *not*
+on `/api/conversations/*` — those are cookie-authenticated and same-origin;
+permissive CORS there would be a real hole.
 
-### The channel token is public, not a secret, once it ships to a browser
+**SSE resume — `Last-Event-ID` is native; the server just honours it.**
+`EventSource` resends the last event `id` on reconnect. The server polls
+Postgres every 1.5s for messages after a `(created_at, id)` cursor
+(`lib/inbox/cursor.ts`) — no queue, no pub/sub (ruled out by CLAUDE.md) — and
+ends the stream every 5 minutes so a Vercel function timeout looks like an
+ordinary drop the client already recovers from.
 
-Day 2's `x-channel-token` is embedded directly in the widget's
-`data-token` attribute — anyone can read it from page source or dev tools.
-It was never meant to be confidential; its job is "which channel is this,
-roughly" (like a Stripe *publishable* key), not authorisation of a trusted
-party. No code changed for this — it's a naming of what was already true,
-so nobody reaches for it as a real secret later.
+> **Lesson — timestamp precision.** `created_at` defaulted to microsecond
+> precision but the driver returns millisecond-only `Date` objects, so a
+> cursor built from a row and round-tripped through `Date` compared as *less
+> than* its own row — the stream resent the newest message forever. Fixed
+> with `timestamptz(3)` (migration `0002`). 35 pglite tests were green
+> throughout; pglite doesn't reproduce Neon's wire precision (backlog).
 
-### CORS added to the two widget-facing endpoints only
+**Widget shell — one `<script type="module">`, config from `data-*`.**
+Module scripts don't set `document.currentScript`, so config is read via
+`document.querySelector('script[data-channel-id][data-token]')`; the API
+origin is derived from that script's own resolved `src`, so the bundle isn't
+tied to one deployment. Compiled by plain `tsc` (no bundler, no new dep) to
+`public/widget/*.js` at build time (`predev` / `prebuild`), gitignored.
 
-The widget runs on an arbitrary customer origin and calls our API
-cross-origin — without CORS headers the browser blocks it outright, so
-this isn't optional for "embeddable via a single script tag" to actually
-work. Added `lib/cors.ts` (wildcard origin, since neither endpoint uses
-cookies — the channel token is the only credential) and applied it to
-the day 2 inbound POST (`OPTIONS` handler + headers on every response,
-CLAUDE.md's "directly blocks the current task" exception to no
-day-2-refactors) and the new SSE stream GET. Deliberately **not** applied
-to `/api/conversations/*` — those are cookie-authenticated and same-origin
-only; permissive CORS there would be a real hole, not a convenience.
+> **Lesson — ESM import extensions.** `tsc` doesn't rewrite extensionless
+> relative imports for real ESM output, so `widget/src/*.ts` must import its
+> siblings with an explicit `.js` (`from "./ui.js"`). `tsc --noEmit` is
+> silent about this either way; it only shows up loading the built output in
+> a browser.
 
-### SSE resume: `Last-Event-ID` is native; the server just has to honour it
+**Message reconciliation — optimistic send + SSE echo, deduped by id.** The
+widget renders its own message immediately with the client-generated id it's
+about to POST. The SSE stream carries *all* messages on the conversation, so
+that message comes back; the widget matches by id and replaces the pending
+bubble instead of appending. The stream is the single source of truth either
+way, so this avoids a second "is this confirmed" code path.
 
-`EventSource` already remembers the last event `id` it saw and resends it
-as a `Last-Event-ID` header on every reconnect — no client-side reconnect
-loop was written. The server (`app/api/channels/[channelId]/stream/route.ts`)
-polls Postgres (no queue, no pub/sub — CLAUDE.md rules those out, and this
-is what "SSE" already meant per day 1) every 1.5s for messages after a
-cursor, and ends the stream cleanly every 5 minutes so a Vercel function
-timeout looks like an ordinary drop the client already knows how to
-recover from, not a special case. The cursor is `(message.created_at,
-message.id)` (`lib/inbox/cursor.ts`) — existing columns, no new table.
-
-Found by testing against real Postgres, not the pglite suite: `created_at`
-defaults to microsecond precision, but the driver hands back a JS `Date`
-(millisecond-only), so a cursor built from a row's own timestamp and
-round-tripped through `Date` compared as *less than* the row it came
-from — the stream resent the last message forever. Fixed by storing
-`message.created_at` at `timestamptz(3)` (migration `0002`), so the value
-Postgres stores and the value a `Date` round-trip produces are identical.
-pglite didn't reproduce this — see backlog for what that means for trusting
-it on timing-sensitive logic.
-
-### Widget shell: one script tag, `type="module"`, config read from `data-*`
-
-The embed is `<script type="module" src=".../widget/index.js"
-data-channel-id="…" data-token="…"></script>`. Module scripts don't set
-`document.currentScript` (a real, easy-to-miss browser gotcha), so config is
-read via `document.querySelector('script[data-channel-id][data-token]')`
-instead of relying on it; the API origin is derived from that same script's
-own resolved `src`, so the bundle is not hard-coded to one deployment.
-Source is compiled by plain `tsc` (`widget/tsconfig.json`, ES module
-output, no bundler — no new dependency) to `public/widget/*.js`, generated
-at build time (`predev`/`prebuild` run `build:widget`) and gitignored, not
-committed. TypeScript does not rewrite extensionless relative imports for
-real ESM output, so `widget/src/*.ts` imports its siblings with an explicit
-`.js` (e.g. `from "./ui.js"`) even though the source file is `.ts` — found
-the same way as the cursor bug, by actually loading the built output in a
-browser (Chrome dev tools showed 503s resolving `./identity`, `./ui`) —
-`tsc --noEmit` type-checks fine either way since it resolves against the
-`.ts` file, so this class of bug is invisible to typecheck and only shows
-up at runtime.
-
-### Message identity bug: the widget echo used the wrong id
-
-Found by the same real-browser test as above, one layer deeper: the stream
-sent each message's `id` as the database row id, but the widget's
-optimistic bubble for its own send is keyed by the *client-generated*
-`messageId` (day 2's `platformMessageId`) — a different UUID. So the
-"reconciliation" this file already describes below silently never matched
-for a visitor's own messages: the DB id never equals the client id, so
-`upsert` always appended instead of replacing, and every visitor message
-that survived a reconnect rendered twice. Fixed by having the stream send
-`platformMessageId ?? id` as the message identity — an agent reply has no
-`platformMessageId` (nothing client-generated exists for it), which is
-exactly the case where falling back to the row id is correct: the widget
-never had a pending copy of an agent's message to reconcile against. Added
-a test (`lib/inbox/stream.test.ts`) asserting the stream exposes
-`platformMessageId` distinctly per direction, so this can't silently regress
-the way it silently shipped the first time — a Vitest suite with no browser
-in the loop had no way to catch a bug that only exists in what two
-different parts of the system call "the same message's id".
-
-### Message reconciliation: optimistic send + SSE echo, deduped by id
-
-The widget renders its own message immediately with the client-generated
-id it's about to POST (day 2's `messageId` = `platformMessageId`). When
-that same message arrives back over SSE — which it always does, since the
-stream is *all* messages on the conversation, not just agent replies — the
-widget matches by id and replaces the pending bubble in place rather than
-appending a second one. Chosen over only trusting the POST response,
-because the SSE stream is the single source of truth either way (task 4
-needs it for agent replies); reusing it for the visitor's own echo avoids
-a second, different "is this confirmed" code path.
+> **Lesson — one message, two ids.** The stream first sent the database row
+> id as identity, but the widget keys its optimistic bubble on the
+> client-generated id, so reconciliation silently never matched for a
+> visitor's own messages and they rendered twice after a reconnect. Fixed:
+> the stream sends `platformMessageId ?? id` (an agent reply has no
+> client id, which is exactly when the row id is the right identity).
+> Regression test in `lib/inbox/stream.test.ts`.
 
 ---
 
-## 2026-09-05 — Day 4: agent inbox
+## 2026-09-05 · Agent inbox
 
-### Account scoping lives in the query functions, not the pages or the UI
+**Account scoping lives in the query functions.** `listConversations`,
+`getOwnedConversation`, `listMessages` (`lib/inbox/queries.ts`) each take
+`accountId` as a required argument and put it in the `WHERE` clause. A
+foreign conversation id is never returned — not filtered out later, not
+hidden by the page. `getOwnedConversation` throws `NotFoundError` rather than
+returning `null`, so a foreign id and a made-up id are indistinguishable.
 
-`lib/inbox/queries.ts` (`listConversations`, `getOwnedConversation`,
-`listMessages`) all take `accountId` as a required argument and put it in
-the `WHERE` clause themselves — the same shape day 2's `ingestInbound` and
-`sendReply` already use. A conversation id from another account is not
-filtered out of a bigger result or hidden by the page; the query never
-returns it, and `getOwnedConversation` throws `NotFoundError` rather than
-returning `null` so a foreign id and a made-up id are indistinguishable to
-the caller. Every route handler and every page is a thin caller of these —
-there is exactly one place that decides whose rows these are.
-
-### List + detail are two pages, not a split-pane app
-
-`/inbox` (list) and `/inbox/[conversationId]` (thread + reply) are separate
-server-rendered routes with an ordinary link between them, not a client-side
-split view sharing state. Slower to click through, far less code, and nothing
-in "basic UI only — list + conversation pane" asked for a single-page app.
+**List + detail are two server-rendered routes**, `/inbox` and
+`/inbox/[conversationId]`, with an ordinary link between them — not a
+client-side split view sharing state. Far less code; nothing asked for a SPA.
 Reconsider if agents complain about the round trip.
 
-### No live updates on the agent side (yet)
+**No live updates on the agent side yet.** A reply lands via
+`router.refresh()` after the POST resolves; the inbox does not watch its own
+stream. The task only required the reply reach the *widget* live. An
+agent-side SSE consumer is a real, separate addition — backlog.
 
-The widget gets SSE (day 3); the inbox list and conversation view do not —
-opening `/inbox` or a conversation is an ordinary page load, and a reply
-lands via `router.refresh()` after the POST resolves, not a stream. Task 10
-only requires the reply reach the *widget* live; teaching the agent UI to
-watch its own stream is a straightforward but real addition (a second
-`EventSource` consumer, a session-authenticated variant of the day 3 route)
-that wasn't asked for here. In backlog.
+**The reply form calls the existing endpoint over HTTP.** `ReplyForm`
+`fetch()`s `POST /api/conversations/:id/messages` — the exact endpoint that
+already exists. Rejected: a server action calling `sendReply` directly — one
+call shorter, but a second entry point into the same behaviour with its own
+request lifecycle.
 
-### Reply form calls the day 2 endpoint over HTTP, not a new server action
+**Pagination reuses day 3's cursor codec**, keyset on `(timestamp, id)`,
+newest-first (`<` instead of `>`). Same problem, opposite direction; no
+change to `cursor.ts`.
 
-`ReplyForm` (client component) `fetch()`s `POST
-/api/conversations/:id/messages` — the exact endpoint day 2 built and day 3
-already exercises no differently than the widget does. Rejected: a server
-action calling `sendReply` directly. It would be one function call shorter,
-but it's a second entry point into the same behaviour with its own request
-lifecycle, and "do not build a new send path" reads most safely as "call the
-one that already exists," not "call the function underneath it again from
-somewhere new."
-
-### Pagination cursor reuses day 3's codec, not a new one
-
-`listConversations` and `listMessages` are keyset-paginated on the same
-`(timestamp, id)` shape day 3's SSE resume uses, importing `encodeCursor` /
-`decodeCursor` from `lib/inbox/cursor.ts` (day 3) — same problem, same
-answer, going the other direction (newest-first, `<` instead of `>`). No
-change to `cursor.ts` itself was needed.
-
-### Last-message preview: a correlated subquery, not a denormalised column
-
-`listConversations`'s preview text comes from a scalar subquery
-(`select body from message where conversation_id = ... order by created_at
-desc limit 1`) per row, not a `last_message_body` column kept in sync on
-every write. It costs one index-backed lookup per row on a page of ~30
-conversations — trivial at this scale — and there is nothing to keep
-consistent by hand. Revisit only if the list query shows up as slow.
+**Last-message preview — a correlated scalar subquery**, not a
+denormalised `last_message_body` column kept in sync on every write. One
+index-backed lookup per row on a page of ~30 — trivial here, and nothing to
+keep consistent by hand. Revisit only if the list query shows up as slow.
 
 ---
 
-## 2026-09-06 — Day 5: production / demo readiness
+## 2026-09-06 · Production / demo readiness
 
-Day 5 changed no application code (only the seed script's default password
-string). Everything below is about the live Vercel deployment.
+No application code changed except one string in `db/seed.ts`.
 
-### Vercel Authentication (deployment protection) was on — turned off
+**Vercel deployment protection was on — turned off.**
+`ssoProtection: { enabled: false }`. Standard Protection put a Vercel login
+wall in front of the whole app, and — worse — `401`'d every cross-origin
+widget call (`POST /inbound`, the SSE stream) before it reached our code. A
+website widget is worthless behind an SSO wall. For a protected staging URL
+later, use a preview deployment with protection on, not production.
 
-The project shipped with Vercel's "Standard Protection" (SSO / Vercel
-Authentication) enabled for every `*.vercel.app` URL. That put a Vercel
-login wall in front of the whole app: a non-technical audience opening the
-URL couldn't get in, and — worse for an embeddable widget — every
-cross-origin call from a customer page (`POST /inbound`, the SSE stream)
-came back `401` from the protection layer before it ever reached our code.
-Turned off (`ssoProtection: { enabled: false }`). The app is now publicly
-reachable, which is the whole point of a website widget. This is also why
-the seeded password had to change the same day (below) — with the wall up,
-a guessable login was academic; without it, it's a real exposure. If a
-non-public staging URL is wanted later, the right move is a Vercel preview
-deployment with protection left on, not protection on production.
+**Seeded demo password — no hardcoded default, value not committed.**
+`db/seed.ts` now *requires* `SEED_AGENT_PASSWORD` and exits if unset, the
+same way it treats `DATABASE_URL` — swapping one guessable literal in public
+source for another isn't the fix. A fresh value was set directly on the
+production Neon DB (the deploy shares that one database) and shared out of
+band; `docs/demo.md` carries a placeholder. A superseded value remains in git
+history — acceptable for a throwaway credential on a data-free account
+(backlog). Real auth hardening (rotation, rate limiting, lockout): backlog.
 
-### Seeded demo password: no hardcoded default, value not committed
+**Production env / DB — verified, nothing to change.** Login against
+production succeeds (`SESSION_SECRET` signs and verifies); `/inbox` and the
+inbound webhook read/write the production Neon DB (`DATABASE_URL`). The
+serverless `Pool` held up across the live smoke test. The session cookie is
+`Secure` + `SameSite=Lax`, correct for the same-origin agent login; the
+widget deliberately uses no cookies.
 
-`db/seed.ts` created `owner@example.com` with `changeme123` — fine when the
-only reader was localhost, not fine once the deployment is public and the
-seed script is in a public repo. The fix isn't to pick a different literal
-(that's still a published credential): `db/seed.ts` now *requires*
-`SEED_AGENT_PASSWORD` and exits if it's unset, the same way it already
-treats `DATABASE_URL`. A fresh non-default value was set directly on the
-production Neon database (the running deploy shares that one database —
-there is no separate prod DB to migrate or seed) and is shared out of band,
-not written into any tracked file — `docs/demo.md` carries a placeholder.
-(A first pass did commit the value to `docs/demo.md`; it was rotated out
-immediately, but the superseded value remains in git history — acceptable
-for a throwaway credential on a data-free account, noted in the backlog.)
-Proper auth hardening (rotation, rate limiting, lockout) stays in the
-backlog; this was just removing a published credential.
-
-### Production env / DB config: verified, nothing to change
-
-`DATABASE_URL` and `SESSION_SECRET` are set on Vercel and work: login
-against production succeeds (session cookie signs and verifies →
-`SESSION_SECRET` good), `/inbox` and the inbound webhook both read/write
-the production Neon database (→ `DATABASE_URL` good). The Neon serverless
-`Pool` held up across many requests during the live smoke test — no
-connection-exhaustion symptoms at this volume. The session cookie is
-`Secure` in production (`NODE_ENV === "production"`) and `SameSite=Lax`,
-which is correct for the same-origin agent login; no cookie-domain or
-cross-site cookie config was needed because the widget deliberately doesn't
-use cookies (day 3).
-
-### SSE reconnect on the live deployment: resume verified server-side
-
-The day 3 mechanism is (a) native `EventSource` auto-reconnect on a dropped
-connection, (b) the server honouring the `Last-Event-ID` header to resume
-from exactly where the client left off. Against the live deployment: a
-fresh stream connection replays the conversation and every event carries an
-`id:` cursor; reconnecting with `Last-Event-ID` set to the last cursor
-returns **zero** message events — no replay, no duplicates, no drops. A
-full widget reload mid-conversation (the harder path: brand-new connection,
-full history replayed once, deduped by id) also comes back clean with the
-thread intact. The one thing not exercised end-to-end is a *transient*
-network blip triggering native `EventSource` retry in the page — the
-browser-automation tools have no offline toggle, and `window.stop()` is a
-permanent close (readyState `CLOSED`, no retry — the widget correctly shows
-its "disconnected" dot), not a recoverable error. Both halves of the
-mechanism are verified independently; the automated "pull the cable" is not.
+**SSE resume — verified server-side on the live deployment.** A fresh stream
+replays the conversation with an `id:` cursor on every event; reconnecting
+with `Last-Event-ID` returns zero message events (no replay, no dupes, no
+drops); a full widget reload replays history once, deduped by id. Not
+exercised: a *transient* network blip triggering native `EventSource` retry
+in the page — the browser tooling has no offline toggle (backlog).

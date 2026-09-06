@@ -14,7 +14,7 @@ import { makeAccount, makeAgent, makeChannel, makeTestDb } from "../../test/db";
  * reply via sendReply (the one send path) is picked up by
  * fetchMessagesSince (the one stream mechanism) on its very next poll,
  * with no widget-side refresh involved. The actual HTTP/EventSource
- * plumbing is verified manually (see docs/day4.md) — this is the part of
+ * plumbing is verified manually (see docs/decisions.md) — this is the part of
  * it that has real logic to get wrong.
  */
 describe("an agent reply reaches the stream the widget is polling", () => {
