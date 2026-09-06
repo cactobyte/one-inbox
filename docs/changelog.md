@@ -7,7 +7,8 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ## Week 1 (Sept 2026) — website widget MVP
 
-Live at https://one-inbox-xi.vercel.app. One channel: website chat.
+Live on Vercel. One channel: website chat. (Deployment URL: see docs/demo.md
+— the `one-inbox-xi` URL in older docs is stale, pending the real one.)
 
 - **Foundations.** Next.js App Router, Drizzle + Neon Postgres, the
   seven-table schema (migration `0000`), agent email/password auth

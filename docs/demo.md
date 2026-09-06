@@ -3,6 +3,9 @@
 How to run the One Inbox demo for a non-technical audience, on the live
 Vercel deployment. Follow it top to bottom.
 
+> **⚠️ The deployment URL below (`one-inbox-xi.vercel.app`) is stale.** Boris
+> has the real one — replace every occurrence before using this runbook.
+
 Everything here runs against production. There is no reset button — messages
 you send during the demo stay in the inbox.
 

@@ -57,11 +57,24 @@ CRM (contact history, notes), broadcast messaging, AI-assisted replies,
 billing/plans. Not scoped in any detail yet — deliberately. Don't let any
 of this leak into Phase 1 or 2 work as "just one small thing while I'm here."
 
-## How to plan sessions from here
-At the end of each session, propose the next milestone (scope + what "done"
-looks like + what will be tested) — in chat or a scratch note, not a
-committed doc — and STOP, waiting for a go-ahead. Do not self-chain
-multiple unapproved milestones in one sitting. Do not move to the next phase
-without an explicit go-ahead, even if the current phase's work is finished
-early. If you think scope should expand beyond what's currently approved,
-say so and wait — don't just build it.
+## How to work from here
+Work is milestone by milestone (see docs/roadmap.md). For each one: build it,
+test it by actually running it, add a docs/changelog.md section and a
+docs/decisions.md entry, then STOP and report what shipped plus the proposed
+next milestone.
+
+The stop after each milestone is a checkpoint for cost and oversight, not a
+required human-QA gate. Boris trusts the testing done here — he can reply
+"go" without re-verifying anything. He steps in only when he wants to, or
+when explicitly asked (see below).
+
+Stop and actually wait for Boris (don't just proceed) when:
+- the milestone can't be finished without him — real third-party credentials
+  (e.g. a LINE channel), a real payment, a DNS/webhook he controls;
+- the adapter interface would have to change, or an eighth table looks needed;
+- the work is about to cross a phase boundary (Phase 1 → 2 especially);
+- scope should expand beyond the current milestone — say so and wait, don't
+  just build it.
+
+Otherwise: one milestone per session, report, and expect a quick go-ahead
+for the next.

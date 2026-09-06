@@ -1,10 +1,12 @@
 # One Inbox — Full Roadmap
 
-Read alongside docs/vision.md. Work through milestones in order. After each:
-add a short section to docs/changelog.md (what shipped) and a decisions.md
-entry (choices + what was rejected), then propose the next milestone and wait
-for a go-ahead. Do not skip ahead or batch multiple milestones without saying
-so first. No per-milestone log file — the changelog is the log.
+Read alongside docs/vision.md, which has the working method in full. Do one
+milestone per session, in order: build it, test it by running it, add a
+docs/changelog.md section and a docs/decisions.md entry, then STOP and report
+(what shipped + proposed next milestone). The stop is a cost/oversight
+checkpoint, not a human-QA gate — Boris can reply "go" without re-verifying.
+Don't batch multiple milestones in one session. No per-milestone log file —
+the changelog is the log.
 
 ## PHASE 1 — Prove the architecture (multi-channel core)
 
