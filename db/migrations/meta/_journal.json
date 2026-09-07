@@ -29,6 +29,13 @@
       "when": 1788798452285,
       "tag": "0003_agent_session_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788799673721,
+      "tag": "0004_agent_email_verified_at",
+      "breakpoints": true
     }
   ]
 }

@@ -83,6 +83,10 @@ export const agent = pgTable("agent", {
   // the per-agent revocation the stateless-cookie design deferred on day 1
   // (docs/decisions.md), without adding a `session` table.
   sessionEpoch: integer("session_epoch").notNull().default(0),
+  // Null until the agent confirms their email via the link sent at signup
+  // (M4). Login is refused while null. Agents created before M4 (and by the
+  // seed script) are backfilled to `now()` — see migration 0004.
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   ...timestamps,
 });
 

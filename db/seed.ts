@@ -6,9 +6,10 @@
  *   SEED_AGENT_EMAIL=you@example.com SEED_AGENT_PASSWORD=secret \
  *   node --env-file=.env --experimental-strip-types db/seed.ts
  *
- * There is no signup UI yet (see docs/backlog.md); this is how the first
- * agent is created. Self-contained (own DB client) so it runs under plain
- * Node without a TypeScript path resolver.
+ * Self-serve signup (M4) is the normal way to create an account now; this
+ * script is for the demo/dev account and its widget channel, and it marks
+ * the agent pre-verified. Self-contained (own DB client) so it runs under
+ * plain Node without a TypeScript path resolver.
  */
 import { randomBytes } from "node:crypto";
 
@@ -66,6 +67,8 @@ if (existing.length > 0) {
     passwordHash: await hashPassword(password),
     name: process.env.SEED_AGENT_NAME ?? "Owner",
     role: "owner",
+    // The seeded agent skips the M4 email-verification step.
+    emailVerifiedAt: new Date(),
   });
   console.log(`Created account "${accountName}" and agent ${email}.`);
 }

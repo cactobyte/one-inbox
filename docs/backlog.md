@@ -6,7 +6,15 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 
 ## Auth / identity
 
-- Signup / invite flow — no UI creates an agent; the first one is seeded.
+- Invite flow — M4 shipped self-serve signup (a new account + owner);
+  inviting a teammate *into* an existing account is still M6.
+- Never-verified signups accumulate — `account` + `agent` rows are written
+  before the email is confirmed (M4). Add a sweep that deletes unverified
+  agents (and their empty account) after N days.
+- Signup says "that email is already registered" — a mild account-enumeration
+  vector. The privacy-preserving alternative is to always show "check your
+  inbox" and email either a verification link or a "you already have an
+  account" note. Weigh it against the worse UX.
 - Global logout is still only "rotate `SESSION_SECRET`" (drops everyone).
   Per-*agent* revocation now exists (`agent.session_epoch`, M3); a full
   `session` table for device-level control is still out (needs sign-off —
@@ -14,7 +22,8 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - `agent.email` is globally unique — the same person can't be an agent in two
   accounts. Would become `unique(account_id, email)` + account selection.
   Deferred to M6 (M3): decide it when team membership is designed.
-- Password rules, rate limiting, lockout on the login action.
+- Rate limiting and lockout on the login and signup actions; password
+  complexity beyond M4's 8-character minimum.
 - Session sliding expiry — currently a fixed 7-day window.
 - The rotated-out demo password sits in git history (commit `2c86e30`).
   Harmless for a data-free account; rotate again and don't commit it if the

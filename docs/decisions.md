@@ -335,6 +335,71 @@ into the same LINE-OA checkpoint from M1.
 
 ---
 
+## 2026-09-08 · M4 — Self-serve signup
+
+**Account is created up front (unverified), not held in the token.** Signup
+inserts the `account` + owner `agent` immediately with
+`email_verified_at = NULL`; the emailed link flips it. Rejected: deferring
+the insert until verification and carrying the signup data in the token — a
+fat token, the password hash in a URL, and no natural home for "resend".
+Trade-off: accounts that are never verified accumulate; a sweep is backlog.
+
+**Login is refused until the email is verified**, and only *after* the
+password check passes — so the "confirm your email" message can't be used to
+probe which addresses have accounts. The sign-in page then offers a resend,
+which always reports success (`findUnverifiedAgent` returns null for unknown
+*or* already-verified, same response either way).
+
+**Verification link — a stateless signed token, same as the session
+cookie.** `lib/verification.ts`: `base64url({sub, prp:"email_verify", exp}).sig`
+HMAC'd with `SESSION_SECRET`, 24h. No table (the data model is full). Both
+token types now carry a `prp` claim and each reader rejects the other's
+purpose — a verification link can't be pasted in as a session cookie, and a
+session cookie isn't a valid link. Legacy pre-M4 cookies (no `prp`) still
+validate.
+
+**`/verify` is a Route Handler, not a page.** It sets the session cookie and
+redirects — a Server Component render can't write cookies. A bad/expired
+token lands on `/login?verify=invalid` with a resend prompt.
+
+**Email — Resend over `fetch`, no SDK** (`lib/email.ts`), the same
+REST-not-dependency choice as the LINE adapter; swap providers by rewriting
+that one file. When `RESEND_API_KEY` / `EMAIL_FROM` are unset (local, preview)
+the message is logged, not sent — the whole flow still works end to end, the
+link just appears in the server log. Rejected: the `resend` npm package (a
+dependency for one POST); nodemailer + SMTP (more config, worse deliverability).
+
+**Migration `0004`** adds `agent.email_verified_at` (nullable) **and
+backfills every existing agent to `now()`** — agents that predate signup were
+created by the seed script or a trusted insert; without the backfill the new
+login check locks them (incl. the demo `owner@example.com`) out. Must be
+applied to Neon before/with this deploy.
+
+**Password rule: 8-character minimum**, in `parseSignup`. The rest of the
+day-1 auth-hardening backlog (rate limiting, lockout, complexity) is still
+open — M4 only needed signup not to accept a one-character password.
+
+**`agent.email` stays globally unique.** Signup's duplicate check and the
+"email already registered" message assume it. This is the M3 deferral (per-
+account email is an M6 call); noting it here because M4 now depends on it.
+
+**Verified by running the full flow** (`next dev` against Neon, a throwaway
+tenant, then deleted): signup → "check your email" → the link verifies +
+signs in + lands on an empty isolated inbox; a bad token → `/login?verify=
+invalid`; login refused while unverified (generic "incorrect" on a wrong
+password, no leak); resend works; a legacy pre-M3 session cookie still
+validated.
+
+> **Lesson — nested forms.** The resend control was a `<form>` rendered
+> *inside* the login `<form>`. HTML forbids form nesting, so the browser
+> drops the inner one and its button submits the *outer* form — every
+> "resend" click re-ran `login`, not `resendVerification`. Only showed up
+> clicking it in a real browser; typecheck and the unit suite were green.
+> Fixed by making the resend form a sibling. `checkLogin` (lib/login.ts) was
+> also extracted from the action so the three sign-in outcomes get tests.
+
+---
+
 ## 2026-09-08 · M3 — Hardening
 
 The milestone was "close or consciously defer the four Day-1 flags." Two

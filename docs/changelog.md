@@ -5,6 +5,34 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M4 (Sept 2026) — Self-serve signup
+
+First Phase-2 milestone. Anyone can create a workspace; no more seed-only
+agents.
+
+- **`/signup`** — business name, your name, email, password (8+). Creates the
+  `account` + owner `agent` (unverified) in one transaction, emails a
+  confirmation link.
+- **`/verify?token=…`** — a Route Handler: marks the email verified (idempotent),
+  signs the agent in, redirects to the inbox. Bad/expired link →
+  `/login?verify=invalid` with a resend prompt.
+- **Login now requires a verified email** — refused (after the password check,
+  so it can't probe accounts) with a resend option on the sign-in page.
+- **Verification token** is stateless and signed like the session cookie
+  (`lib/verification.ts`), 24h, no table. Both token types carry a `prp`
+  claim now and reject each other.
+- **Email** (`lib/email.ts`) — Resend via `fetch`, no SDK. Unconfigured
+  (local/preview) → the message is logged, so the flow works without email
+  infra; the link is in the server log.
+- **Migration `0004`** — `agent.email_verified_at`, and backfills all existing
+  agents to verified so the login check doesn't lock them out. Apply to Neon
+  before/with this deploy.
+- New env (all optional in dev): `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`.
+- Verified by running the whole flow against Neon (throwaway tenant, then
+  deleted). Caught + fixed a nested-`<form>` bug that broke the resend button.
+
+---
+
 ## M3 (Sept 2026) — Hardening
 
 Closed or consciously deferred the four Day-1 flags.

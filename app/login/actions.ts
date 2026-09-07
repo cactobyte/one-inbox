@@ -1,45 +1,39 @@
 "use server";
 
-import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { agent } from "@/db/schema";
-import { verifyPassword } from "@/lib/password";
+import { checkLogin } from "@/lib/login";
 import { clearSessionCookie, setSessionCookie } from "@/lib/session";
 
-export type LoginState = { error?: string };
+export type LoginState = { error?: string; unverifiedEmail?: string };
 
 export async function login(
   _prev: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
-  const email = String(formData.get("email") ?? "")
-    .trim()
-    .toLowerCase();
+  const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
 
   if (!email || !password) {
     return { error: "Enter your email and password." };
   }
 
-  const [row] = await db
-    .select({
-      id: agent.id,
-      passwordHash: agent.passwordHash,
-      sessionEpoch: agent.sessionEpoch,
-    })
-    .from(agent)
-    .where(eq(agent.email, email))
-    .limit(1);
+  const outcome = await checkLogin(db, email, password);
 
-  // Same message and roughly the same work whether or not the email exists.
-  const ok = row ? await verifyPassword(password, row.passwordHash) : false;
-  if (!row || !ok) {
+  if (outcome.status === "invalid") {
     return { error: "Email or password is incorrect." };
   }
+  if (outcome.status === "unverified") {
+    // Correct credentials but the email was never confirmed (M4). Surfaced
+    // only here — after the password check — so it can't probe accounts.
+    return {
+      error: "Confirm your email address to sign in — check your inbox.",
+      unverifiedEmail: outcome.agent.email,
+    };
+  }
 
-  await setSessionCookie(row.id, row.sessionEpoch);
+  await setSessionCookie(outcome.agent.id, outcome.agent.sessionEpoch);
   redirect("/inbox");
 }
 

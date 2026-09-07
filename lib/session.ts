@@ -41,18 +41,24 @@ function safeEqual(a: string, b: string): boolean {
   return ab.length === bb.length && timingSafeEqual(ab, bb);
 }
 
+// `prp` distinguishes a session cookie from the email-verification token in
+// lib/verification.ts — both are HMAC'd with SESSION_SECRET, and one must
+// never be accepted where the other is expected. Legacy cookies (pre-M4)
+// carry no `prp` and are still honoured.
+const PURPOSE = "session";
+
 export function createSessionToken(agentId: string, epoch: number): string {
   const exp = Math.floor(Date.now() / 1000) + MAX_AGE_SECONDS;
   const payload = Buffer.from(
-    JSON.stringify({ sub: agentId, epc: epoch, exp }),
+    JSON.stringify({ sub: agentId, epc: epoch, prp: PURPOSE, exp }),
   ).toString("base64url");
   return `${payload}.${sign(payload)}`;
 }
 
 /**
- * The claims if the token is well-formed, signed and unexpired — else null.
- * Does not check `epoch` against the database; the caller does that with the
- * agent row (see `getCurrentAgent`).
+ * The claims if the token is well-formed, signed, unexpired and a session
+ * token (not, say, a verification link). Does not check `epoch` against the
+ * database; the caller does that with the agent row (see `getCurrentAgent`).
  */
 export function readSessionToken(token: string | undefined): SessionClaims | null {
   if (!token) return null;
@@ -60,10 +66,11 @@ export function readSessionToken(token: string | undefined): SessionClaims | nul
   if (!payload || !sig || !safeEqual(sig, sign(payload))) return null;
 
   try {
-    const { sub, epc, exp } = JSON.parse(
+    const { sub, epc, prp, exp } = JSON.parse(
       Buffer.from(payload, "base64url").toString(),
-    ) as { sub?: string; epc?: number; exp?: number };
+    ) as { sub?: string; epc?: number; prp?: string; exp?: number };
     if (!sub || !exp || exp * 1000 < Date.now()) return null;
+    if (prp !== undefined && prp !== PURPOSE) return null;
     return { agentId: sub, epoch: typeof epc === "number" ? epc : 0 };
   } catch {
     return null;
