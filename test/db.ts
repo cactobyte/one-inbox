@@ -30,14 +30,24 @@ export async function makeAccount(db: TestDb, name?: string): Promise<string> {
   return row.id;
 }
 
-/** Insert a channel for an account and return its id. */
+/** Insert a channel for an account and return its id. Defaults to the widget. */
 export async function makeChannel(
   db: TestDb,
   accountId: string,
+  options: {
+    type?: schema.ChannelType;
+    name?: string;
+    config?: Record<string, unknown>;
+  } = {},
 ): Promise<{ id: string; accountId: string }> {
   const [row] = await db
     .insert(schema.channel)
-    .values({ accountId, type: "widget", name: "Website", config: {} })
+    .values({
+      accountId,
+      type: options.type ?? "widget",
+      name: options.name ?? "Website",
+      config: options.config ?? {},
+    })
     .returning({ id: schema.channel.id });
   return { id: row.id, accountId };
 }

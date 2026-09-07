@@ -19,7 +19,7 @@ async function send(messageId: string, text: string) {
   await ingestInbound(
     appDb,
     { id: channelId, accountId },
-    websiteAdapter.parseInbound({ messageId, visitorId: "v1", text }, {}),
+    websiteAdapter.parseInbound({ messageId, visitorId: "v1", text }, {})[0],
   );
 }
 

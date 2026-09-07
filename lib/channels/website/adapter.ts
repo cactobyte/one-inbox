@@ -100,7 +100,7 @@ function parseSentAt(value: unknown): Date {
 }
 
 export const websiteAdapter: ChannelAdapter = {
-  parseInbound(payload: unknown): InboundMessage {
+  parseInbound(payload: unknown): InboundMessage[] {
     if (!isObject(payload)) {
       throw new InvalidPayloadError("payload must be a JSON object");
     }
@@ -120,21 +120,25 @@ export const websiteAdapter: ChannelAdapter = {
     const visitorName = optionalString(payload, "visitorName");
     const visitorEmail = optionalString(payload, "visitorEmail");
 
-    return {
-      platformMessageId: messageId,
-      sentAt: parseSentAt(payload.sentAt),
-      body: text,
-      attachments,
-      contact: {
-        platformId: visitorId,
-        displayName: visitorName?.trim() || "Website visitor",
-        email: visitorEmail ?? null,
+    // The widget POSTs exactly one message per request; the array is the
+    // adapter contract, not a batch the widget ever sends.
+    return [
+      {
+        platformMessageId: messageId,
+        sentAt: parseSentAt(payload.sentAt),
+        body: text,
+        attachments,
+        contact: {
+          platformId: visitorId,
+          displayName: visitorName?.trim() || "Website visitor",
+          email: visitorEmail ?? null,
+        },
+        thread: {
+          // v1: one visitor, one thread.
+          platformId: visitorId,
+        },
       },
-      thread: {
-        // v1: one visitor, one thread.
-        platformId: visitorId,
-      },
-    };
+    ];
   },
 
   // The website widget has no API to post into. An outbound message is

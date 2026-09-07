@@ -25,7 +25,7 @@ async function seedConversation(accountId: string, channel: { id: string; accoun
   return ingestInbound(
     appDb,
     channel,
-    websiteAdapter.parseInbound({ messageId: `${visitorId}-1`, visitorId, text }, {}),
+    websiteAdapter.parseInbound({ messageId: `${visitorId}-1`, visitorId, text }, {})[0],
   );
 }
 

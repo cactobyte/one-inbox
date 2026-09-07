@@ -27,7 +27,7 @@ describe("an agent reply reaches the stream the widget is polling", () => {
     const inbound = await ingestInbound(
       appDb,
       channel,
-      websiteAdapter.parseInbound({ messageId: "m1", visitorId: "v1", text: "Hi" }, {}),
+      websiteAdapter.parseInbound({ messageId: "m1", visitorId: "v1", text: "Hi" }, {})[0],
     );
 
     // The widget's stream has already delivered everything up to here.

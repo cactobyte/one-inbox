@@ -14,7 +14,7 @@ import { randomBytes } from "node:crypto";
 
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import { account, agent, channel } from "./schema.ts";
 import { hashPassword } from "../lib/password.ts";
@@ -73,7 +73,7 @@ if (existing.length > 0) {
 const [existingChannel] = await db
   .select({ id: channel.id, config: channel.config })
   .from(channel)
-  .where(eq(channel.accountId, accountId))
+  .where(and(eq(channel.accountId, accountId), eq(channel.type, "widget")))
   .limit(1);
 
 if (existingChannel) {
@@ -96,6 +96,51 @@ if (existingChannel) {
   console.log(
     `  POST http://localhost:3000/api/channels/${ch.id}/inbound  (header x-channel-token)`,
   );
+}
+
+// LINE channel (M1) — only when its credentials are supplied. There is no
+// integrations UI yet (roadmap M7 moves these to encrypted per-tenant
+// storage); until then the channel secret and access token live in
+// `channel.config`, exactly as the widget's inbound token does.
+const lineChannelSecret = process.env.SEED_LINE_CHANNEL_SECRET;
+const lineAccessToken = process.env.SEED_LINE_CHANNEL_ACCESS_TOKEN;
+
+if (lineChannelSecret) {
+  const [existingLine] = await db
+    .select({ id: channel.id })
+    .from(channel)
+    .where(and(eq(channel.accountId, accountId), eq(channel.type, "line")))
+    .limit(1);
+
+  if (existingLine) {
+    await db
+      .update(channel)
+      .set({
+        config: {
+          channelSecret: lineChannelSecret,
+          channelAccessToken: lineAccessToken ?? null,
+        },
+      })
+      .where(eq(channel.id, existingLine.id));
+    console.log(`Updated LINE channel config: ${existingLine.id}`);
+  } else {
+    const [ch] = await db
+      .insert(channel)
+      .values({
+        accountId,
+        type: "line",
+        name: process.env.SEED_LINE_CHANNEL_NAME ?? "LINE",
+        config: {
+          channelSecret: lineChannelSecret,
+          channelAccessToken: lineAccessToken ?? null,
+        },
+      })
+      .returning({ id: channel.id });
+    console.log(`Created LINE channel: ${ch.id}`);
+    console.log(
+      `  Set the LINE webhook URL to https://<deployment>/api/channels/${ch.id}/inbound`,
+    );
+  }
 }
 
 process.exit(0);

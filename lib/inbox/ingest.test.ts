@@ -29,11 +29,16 @@ const payload = {
   text: "Is the shop open today?",
 };
 
+/** The widget always POSTs one message; unwrap the adapter's array. */
+function parseOne(input: Record<string, unknown>) {
+  return websiteAdapter.parseInbound(input, {})[0];
+}
+
 describe("ingestInbound — idempotency", () => {
   it("writes exactly one message for the same payload twice", async () => {
     const accountId = await makeAccount(db);
     const channel = await makeChannel(db, accountId);
-    const inbound = websiteAdapter.parseInbound(payload, {});
+    const inbound = parseOne(payload);
 
     const first = await ingestInbound(appDb, channel, inbound);
     const second = await ingestInbound(appDb, channel, inbound);
@@ -67,12 +72,12 @@ describe("ingestInbound — idempotency", () => {
     const a = await ingestInbound(
       appDb,
       channel,
-      websiteAdapter.parseInbound({ ...payload, messageId: "wh-1" }, {}),
+      parseOne({ ...payload, messageId: "wh-1" }),
     );
     const b = await ingestInbound(
       appDb,
       channel,
-      websiteAdapter.parseInbound({ ...payload, messageId: "wh-2" }, {}),
+      parseOne({ ...payload, messageId: "wh-2" }),
     );
 
     expect(b.status).toBe("created");
@@ -92,7 +97,7 @@ describe("account isolation", () => {
     const channelB = await makeChannel(db, accountB);
 
     // Identical widget payload arrives on both accounts' channels.
-    const inbound = websiteAdapter.parseInbound(payload, {});
+    const inbound = parseOne(payload);
     const inA = await ingestInbound(appDb, channelA, inbound);
     const inB = await ingestInbound(appDb, channelB, inbound);
 
@@ -117,7 +122,7 @@ describe("account isolation", () => {
     const inbound = await ingestInbound(
       appDb,
       channelA,
-      websiteAdapter.parseInbound(payload, {}),
+      parseOne(payload),
     );
 
     const agentB = await makeAgent(db, accountB);
@@ -156,7 +161,7 @@ describe("account isolation", () => {
     const inbound = await ingestInbound(
       appDb,
       channelA,
-      websiteAdapter.parseInbound(payload, {}),
+      parseOne(payload),
     );
 
     const agentA = await makeAgent(db, accountA);

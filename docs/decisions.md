@@ -232,3 +232,60 @@ with `Last-Event-ID` returns zero message events (no replay, no dupes, no
 drops); a full widget reload replays history once, deduped by id. Not
 exercised: a *transient* network blip triggering native `EventSource` retry
 in the page — the browser tooling has no offline toggle (backlog).
+
+---
+
+## 2026-09-07 · M1 — LINE adapter
+
+**`parseInbound` now returns `InboundMessage[]`, not one message.** A LINE
+webhook body is `{ events: [...] }` and routinely carries several messages in
+one delivery (a customer firing off two lines); Messenger batches the same
+way. Returning one message would silently drop the rest — the exact
+"duplicate/dropped messages" bug CLAUDE.md calls out. The fan-out cannot live
+in the route without the route knowing LINE's envelope shape (breaks rule 2),
+so the adapter returns all of them. The website adapter returns a one-element
+array; the inbound route loops `ingestInbound` and reports a `results[]`.
+This is the interface change M1 was allowed to make with a written reason.
+Rejected: an optional `parseInboundBatch` (two ways to parse, and the thing
+the Foundations note warned against).
+
+**Webhook verification — a registry keyed on channel type, not an adapter
+method.** `lib/channels/verify.ts`, same shape as the adapter registry: LINE
+→ HMAC-SHA256 of the raw body against `x-line-signature`; everything else →
+the existing shared-token check. This is the "endpoint strategy keyed on
+channel type" the day-2 note predicted. Keeps `ChannelAdapter` at exactly two
+methods (Foundations explicitly rejected a `verify()` method on the
+interface). The route now reads the body with `request.text()` so the HMAC
+sees the exact bytes, then `JSON.parse`s it.
+
+**Outbound — push API, not reply tokens.** `POST /v2/bot/message/push` with
+the channel access token. LINE's free reply token expires ~30s after the
+inbound message; an agent inbox replies minutes later, so reply tokens are
+unusable here. Trade-off: push messages count against the monthly quota.
+Delivery still happens before the DB write (same as the website path); an
+outbox is still in the backlog.
+
+**M1 scope limits, all in the backlog.** 1:1 user chats only (group/room
+messages are skipped — different push semantics). Text only: inbound media
+becomes a `[sticker]`/`[image]` placeholder with no attachment (fetching LINE
+media needs a second authenticated call plus blob storage); outbound is
+text-only and rejects an attachment-only reply. Contact display name is
+`"LINE user"` — the real name needs a profile API call, which does not belong
+in a pure `parseInbound`.
+
+**No migration.** `channel.type` already allowed `"line"`, `channel.config`
+is `jsonb`, and contact/conversation/message are channel-agnostic by design.
+The LINE channel's `channelSecret` and `channelAccessToken` sit in
+`channel.config` in plaintext, exactly as the widget's `inboundToken` does;
+roadmap M7 moves channel credentials to encrypted per-tenant storage.
+
+**Redelivery.** LINE resends webhooks on our 5xx. Idempotency is unchanged:
+the key is LINE's `message.id` → `message.platform_message_id`, stable across
+a redelivery, so `ingestInbound` returns `duplicate` and writes nothing.
+`deliveryContext.isRedelivery` needs no special handling.
+
+**Not verified live.** A real LINE OA round-trip (real channel secret +
+access token, public webhook URL) is Boris/Jesper's checkpoint. Covered
+offline: `lib/channels/line/pipeline.test.ts` runs verify → `parseInbound` →
+`ingestInbound` on real (pglite) Postgres, including a batched delivery and a
+redelivery; `adapter.test.ts` mocks `fetch` for the push path.

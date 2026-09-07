@@ -33,7 +33,7 @@ describe("visitor identity threading (widget identity + server ingest)", () => {
       websiteAdapter.parseInbound(
         { messageId: "m1", visitorId: visitorIdBeforeReload, text: "Hi" },
         {},
-      ),
+      )[0],
     );
 
     // Simulated reload: a fresh call against the SAME storage should read
@@ -47,7 +47,7 @@ describe("visitor identity threading (widget identity + server ingest)", () => {
       websiteAdapter.parseInbound(
         { messageId: "m2", visitorId: visitorIdAfterReload, text: "Still there?" },
         {},
-      ),
+      )[0],
     );
 
     expect(second.conversationId).toBe(first.conversationId);

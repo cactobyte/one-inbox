@@ -2,23 +2,26 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { channel as channelTable } from "@/db/schema";
-import { tokenMatches } from "@/lib/channel-auth";
 import { InvalidPayloadError } from "@/lib/channels/adapter";
 import { getAdapter, UnknownChannelError } from "@/lib/channels/registry";
+import { verifyInboundWebhook } from "@/lib/channels/verify";
 import { corsPreflight, withCors } from "@/lib/cors";
-import { ingestInbound } from "@/lib/inbox/ingest";
+import { ingestInbound, type IngestResult } from "@/lib/inbox/ingest";
 import { jsonError, jsonOk } from "@/lib/http";
 
 type RouteContext = { params: Promise<{ channelId: string }> };
 
 /**
  * Inbound webhook for one channel. The `channelId` in the path is the entry
- * point; it resolves to the account. The `x-channel-token` header is checked
- * against `channel.config.inboundToken` (per-platform signature verification
- * is a later concern — see docs/decisions.md).
+ * point; it resolves to the account. Authenticity is verified per channel
+ * type by `lib/channels/verify.ts` — the widget's shared `x-channel-token`,
+ * LINE's `x-line-signature` HMAC over the raw body.
  *
- * Idempotent: the same payload twice returns 200 with `status: "duplicate"`
- * and writes nothing the second time.
+ * One delivery can carry several messages (LINE batches `events`); each is
+ * ingested independently and reported in `results`.
+ *
+ * Idempotent: a message already seen reports `status: "duplicate"` and
+ * writes nothing the second time.
  *
  * The widget calls this from whatever origin it's embedded on, so it needs
  * CORS (see lib/cors.ts) — a preflight OPTIONS handler and the header on
@@ -42,13 +45,20 @@ export async function POST(request: Request, context: RouteContext) {
   }
 
   const config = (channel.config ?? {}) as Record<string, unknown>;
-  if (!tokenMatches(request.headers.get("x-channel-token"), config.inboundToken)) {
-    return withCors(jsonError("Invalid channel token", 401, "unauthorised"));
+  const rawBody = await request.text();
+
+  const authentic = verifyInboundWebhook(
+    channel.type,
+    { header: (name) => request.headers.get(name), rawBody },
+    config,
+  );
+  if (!authentic) {
+    return withCors(jsonError("Webhook verification failed", 401, "unauthorised"));
   }
 
   let payload: unknown;
   try {
-    payload = await request.json();
+    payload = JSON.parse(rawBody);
   } catch {
     return withCors(jsonError("Body is not valid JSON", 400, "invalid_json"));
   }
@@ -73,17 +83,28 @@ export async function POST(request: Request, context: RouteContext) {
     throw error;
   }
 
-  const result = await ingestInbound(db, channel, inbound);
+  const results: IngestResult[] = [];
+  for (const message of inbound) {
+    results.push(await ingestInbound(db, channel, message));
+  }
+
+  const created = results.some((r) => r.status === "created");
+  // "accepted" covers a delivery with nothing to ingest — a LINE
+  // follow/unfollow or verification ping. LINE only needs a 2xx.
+  const status = results.length === 0 ? "accepted" : created ? "created" : "duplicate";
 
   return withCors(
     jsonOk(
       {
-        status: result.status,
-        conversationId: result.conversationId,
-        contactId: result.contactId,
-        messageId: result.messageId,
+        status,
+        results: results.map((r) => ({
+          status: r.status,
+          conversationId: r.conversationId,
+          contactId: r.contactId,
+          messageId: r.messageId,
+        })),
       },
-      result.status === "created" ? 201 : 200,
+      created ? 201 : 200,
     ),
   );
 }

@@ -10,7 +10,7 @@
 const PUBLIC_CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, OPTIONS",
-  "access-control-allow-headers": "content-type, x-channel-token",
+  "access-control-allow-headers": "content-type, x-channel-token, x-line-signature",
 };
 
 /** Answer a CORS preflight OPTIONS request for a public widget endpoint. */

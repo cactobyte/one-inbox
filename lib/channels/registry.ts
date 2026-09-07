@@ -1,6 +1,7 @@
 import type { ChannelType } from "@/db/schema";
 
 import type { ChannelAdapter } from "./adapter";
+import { lineAdapter } from "./line/adapter";
 import { websiteAdapter } from "./website/adapter";
 
 /**
@@ -10,6 +11,7 @@ import { websiteAdapter } from "./website/adapter";
  */
 const ADAPTERS: Partial<Record<ChannelType, ChannelAdapter>> = {
   widget: websiteAdapter,
+  line: lineAdapter,
 };
 
 /** Raised when a channel row has a type with no adapter wired up. */

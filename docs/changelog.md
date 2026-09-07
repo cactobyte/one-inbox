@@ -5,6 +5,29 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M1 (Sept 2026) — LINE adapter
+
+Second channel. LINE Messaging API webhooks in, agent replies out, through
+the pipeline the website widget already used — no downstream changes.
+
+- **LINE adapter** (`lib/channels/line/`). `parseInbound` turns one webhook
+  body into every message it carries; `sendOutbound` delivers an agent reply
+  with the push API. 1:1 user chats, text (media → a placeholder body).
+- **Webhook verification keyed on channel type** (`lib/channels/verify.ts`).
+  LINE's `x-line-signature` HMAC over the raw body; the shared-token check
+  stays the default. `ChannelAdapter` stays at two methods.
+- **Interface change:** `ChannelAdapter.parseInbound` now returns
+  `InboundMessage[]` — LINE (and later Messenger) batch several messages per
+  delivery. The inbound route loops the ingest and returns `results[]`.
+- **No migration.** `channel.type` already allowed `line`; credentials live
+  in `channel.config` (encryption is roadmap M7). Idempotency on LINE's
+  `message.id` handles LINE's webhook redelivery unchanged.
+- **Tested offline** (verify → parse → ingest on real pglite Postgres, push
+  path with a mocked `fetch`). A live LINE OA round-trip is the open
+  checkpoint.
+
+---
+
 ## Week 1 (Sept 2026) — website widget MVP
 
 Live on Vercel. One channel: website chat. (Deployment URL: see docs/demo.md

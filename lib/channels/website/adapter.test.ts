@@ -11,7 +11,7 @@ const base = {
 
 describe("websiteAdapter.parseInbound", () => {
   it("normalises a well-formed payload", () => {
-    const msg = websiteAdapter.parseInbound(
+    const msgs = websiteAdapter.parseInbound(
       {
         ...base,
         visitorName: "  Nok  ",
@@ -21,6 +21,8 @@ describe("websiteAdapter.parseInbound", () => {
       {},
     );
 
+    expect(msgs).toHaveLength(1);
+    const [msg] = msgs;
     expect(msg.platformMessageId).toBe("m-1");
     expect(msg.body).toBe("Hello there");
     expect(msg.contact).toEqual({
@@ -35,14 +37,14 @@ describe("websiteAdapter.parseInbound", () => {
 
   it("defaults the display name and sentAt", () => {
     const before = Date.now();
-    const msg = websiteAdapter.parseInbound(base, {});
+    const [msg] = websiteAdapter.parseInbound(base, {});
     expect(msg.contact.displayName).toBe("Website visitor");
     expect(msg.contact.email).toBeNull();
     expect(msg.sentAt.getTime()).toBeGreaterThanOrEqual(before);
   });
 
   it("uses the visitor id as the thread id (one thread per visitor)", () => {
-    const msg = websiteAdapter.parseInbound({ ...base, visitorId: "abc" }, {});
+    const [msg] = websiteAdapter.parseInbound({ ...base, visitorId: "abc" }, {});
     expect(msg.thread.platformId).toBe("abc");
     expect(msg.contact.platformId).toBe("abc");
   });
@@ -69,7 +71,7 @@ describe("websiteAdapter.parseInbound", () => {
   });
 
   it("accepts an attachment-only message", () => {
-    const msg = websiteAdapter.parseInbound(
+    const [msg] = websiteAdapter.parseInbound(
       {
         ...base,
         text: "",

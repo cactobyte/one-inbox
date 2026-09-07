@@ -7,7 +7,7 @@ import type {
 /**
  * A channel adapter does exactly two things (CLAUDE.md architecture rule 1):
  *
- *  1. `parseInbound` — turn a raw platform payload into an `InboundMessage`.
+ *  1. `parseInbound` — turn a raw platform payload into normalised messages.
  *  2. `sendOutbound` — deliver an `OutboundMessage` to that platform.
  *
  * It holds no business logic, touches no database, and knows nothing about
@@ -15,18 +15,30 @@ import type {
  * connected inbox (tokens, secrets, page ids) arrives in `config` — the
  * opaque `channel.config` JSON for this channel.
  *
- * Written to fit LINE, Messenger and WhatsApp adapters that do not exist
- * yet: there are no website-specific concepts in this interface.
+ * Webhook authenticity (LINE's HMAC signature, Messenger's `X-Hub-Signature`)
+ * is verified *before* this interface is reached — see `lib/channels/verify.ts`,
+ * an endpoint strategy keyed on channel type. It is deliberately not a method
+ * here: that keeps "exactly two things" true and keeps transport out of every
+ * adapter (see docs/decisions.md, Foundations).
+ *
+ * Written to fit LINE, Messenger and WhatsApp adapters: there are no
+ * website-specific concepts in this interface.
  */
 export interface ChannelAdapter {
   /**
-   * Parse and validate a raw inbound payload. Synchronous and pure — no
-   * network, no clock beyond reading timestamps out of the payload.
+   * Parse and validate a raw inbound payload into zero or more normalised
+   * messages. Synchronous and pure — no network, no clock beyond reading
+   * timestamps out of the payload.
    *
-   * @throws {InvalidPayloadError} if the payload is not a message this
-   *   adapter can normalise.
+   * Returns an array because a single webhook delivery can carry several
+   * messages (LINE batches `events`, Messenger batches `entry[].messaging[]`).
+   * Payload envelopes with nothing to ingest — a LINE follow/unfollow, an
+   * event type the adapter does not handle — return `[]`, not an error.
+   *
+   * @throws {InvalidPayloadError} if the payload envelope itself is malformed
+   *   (not the shape this platform sends at all).
    */
-  parseInbound(payload: unknown, config: ChannelConfig): InboundMessage;
+  parseInbound(payload: unknown, config: ChannelConfig): InboundMessage[];
 
   /**
    * Deliver a normalised outbound message to the platform. May call the

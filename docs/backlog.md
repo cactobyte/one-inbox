@@ -32,8 +32,6 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 
 ## Channels / message flow
 
-- Per-platform webhook signature verification — needs a home (adapter
-  capability or endpoint strategy) before LINE.
 - Website multi-thread — one visitor maps to one conversation forever; real
   widgets let a visitor start a new thread. Needs a thread id in the payload.
 - Outbound delivery ordering — `sendReply` delivers through the adapter then
@@ -45,6 +43,24 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - Conversation-creation race — two messages for a brand-new thread arriving
   together can each write a `created` event. Harmless; an upsert-with-
   RETURNING or advisory lock fixes it.
+
+### LINE (M1) deferrals
+
+- LINE contact display name is hardcoded `"LINE user"` — fetch it from the
+  profile API (`GET /v2/bot/profile/{userId}`) on contact creation.
+- LINE inbound media (image/video/audio/file/sticker) becomes a placeholder
+  body with no attachment — needs the content API (`GET /v2/bot/message/
+  {id}/content`) plus blob storage, then real `NormalisedAttachment`s.
+- LINE outbound is text-only and throws on an attachment-only reply.
+- LINE group/room messages are skipped — 1:1 only. Group push uses a
+  different `to` and reply semantics.
+- LINE reply-token path unused (tokens expire ~30s); every reply is a push
+  and counts against the monthly quota. Consider reply-token when the inbound
+  message is fresh.
+- `channelSecret` / `channelAccessToken` sit in `channel.config` plaintext
+  like the widget token — roadmap M7 encrypts channel credentials at rest.
+- No echo/self-message filtering for LINE (it doesn't echo push); Messenger
+  will need it.
 
 ## Widget
 

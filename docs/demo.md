@@ -172,6 +172,37 @@ If you want to demo from a *real* separate page instead of the hosted
 
 ---
 
+## Connecting a LINE channel (M1, technical prep)
+
+Not part of the demo script above — this is the one-time setup to get a real
+LINE Official Account flowing into the inbox.
+
+1. In the [LINE Developers console](https://developers.line.biz/), open the
+   Messaging API channel and note its **Channel secret** and a long-lived
+   **Channel access token**.
+2. Create the channel row (needs database access):
+
+   ```
+   SEED_AGENT_EMAIL=owner@example.com SEED_AGENT_PASSWORD=... \
+   SEED_LINE_CHANNEL_SECRET=<channel secret> \
+   SEED_LINE_CHANNEL_ACCESS_TOKEN=<access token> \
+   npm run db:seed
+   ```
+
+   It prints the new channel id. Re-running with the same env updates the
+   stored credentials.
+3. In the LINE console, set the **Webhook URL** to
+   `https://<deployment>/api/channels/<channel id>/inbound` and turn
+   **Use webhook** on. "Verify" should return success.
+4. Message the OA from a personal LINE account — it appears in the inbox as a
+   new conversation. An agent reply goes back to LINE as a push message.
+
+Limits in M1: 1:1 chats only, text only (a sticker or image shows as
+`[sticker]` / `[image]`), and the contact shows as "LINE user" until the
+profile lookup lands. See `docs/decisions.md` (M1) and `docs/backlog.md`.
+
+---
+
 ## If something breaks mid-demo
 
 - **Widget bubble doesn't appear:** hard-reload the left window
