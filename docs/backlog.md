@@ -22,8 +22,11 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - `agent.email` is globally unique — the same person can't be an agent in two
   accounts. Would become `unique(account_id, email)` + account selection.
   Deferred to M6 (M3): decide it when team membership is designed.
-- Rate limiting and lockout on the login and signup actions; password
-  complexity beyond M4's 8-character minimum.
+- Rate limiting and lockout on the login, signup, and forgot-password
+  actions; password complexity beyond M4's 8-character minimum.
+- Three signed-token modules now: `lib/session.ts`, `lib/verification.ts`,
+  and `lib/signed-token.ts` (M5's shared primitive). Fold the first two onto
+  the third — `session.ts` needs its `epc` payload carried through.
 - Session sliding expiry — currently a fixed 7-day window.
 - The rotated-out demo password sits in git history (commit `2c86e30`).
   Harmless for a data-free account; rotate again and don't commit it if the

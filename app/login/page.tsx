@@ -29,6 +29,11 @@ export default async function LoginPage({
         ) : null}
         <LoginForm />
         <p className="muted">
+          <Link href="/forgot-password" className="link">
+            Forgot your password?
+          </Link>
+        </p>
+        <p className="muted">
           New here? <Link href="/signup" className="link">Create an account</Link>
         </p>
       </section>

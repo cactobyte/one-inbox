@@ -335,6 +335,47 @@ into the same LINE-OA checkpoint from M1.
 
 ---
 
+## 2026-09-08 · M5 — Password reset
+
+**Reuses M4's parts — no new infrastructure.** `/forgot-password` emails a
+signed link; `/reset-password?token=…` shows a new-password form; the action
+re-validates the token, writes the hash, and `bumpSessionEpoch`s (M3). Same
+`lib/email.ts`, same stateless-token pattern, no table, no migration.
+
+**The reset link is single-use, enforced through the session epoch.** The
+token's subject is `<agentId>.<epoch-at-issue>`. Completing a reset bumps the
+epoch, so a second click — or a link that was already used and then
+intercepted — fails the epoch check in `resetPassword`. Rejected: a
+`used_at` column (a table-ish write for something the epoch already tracks);
+accepting reuse within the 1h window (a used reset link is a credential).
+
+**A reset signs the agent in (fresh cookie at the new epoch) and drops every
+other session.** They just proved mailbox control and chose the password;
+making them type it again immediately is friction. Everyone else holding an
+old-epoch cookie is logged out — which is the point of resetting after a
+password leak. TTL is 1 hour (vs. 24h for signup confirmation): more
+sensitive, acted on immediately.
+
+**Reset works regardless of email-verification state** and does not change
+it. An agent who signed up, never confirmed, and forgot their password can
+still reset it; they still can't *log in* until they verify (M4). Kept
+separate on purpose — one link proves one thing.
+
+**Third signed-token module → extracted `lib/signed-token.ts`.** `session.ts`
+and `verification.ts` each rolled their own HMAC token; M5 made three.
+`signed-token.ts` is the shared `(purpose, subject, ttl)` primitive; M5 uses
+it. Folding `session.ts` (its payload also carries `epc`) and
+`verification.ts` onto it is in the backlog — not done here to keep M3/M4
+auth code untouched.
+
+**Verified by running it** (`next dev`, throwaway account, then deleted):
+forgot → "if that's an account…" → the emailed link opens the form → mismatch
+is caught → a real reset saves the new password and lands on the inbox → the
+spent link then reports "already used" → the old password is refused, the new
+one is accepted.
+
+---
+
 ## 2026-09-08 · M4 — Self-serve signup
 
 **Account is created up front (unverified), not held in the token.** Signup

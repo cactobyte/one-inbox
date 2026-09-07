@@ -5,6 +5,23 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M5 (Sept 2026) — Password reset
+
+- **`/forgot-password`** — enter email, always get "if that's an account, a
+  link is on its way" (no enumeration). Emails a signed reset link, 1h TTL.
+- **`/reset-password?token=…`** — new-password + confirm form. The action
+  re-validates the token, writes the hash, drops every existing session
+  (`bumpSessionEpoch`, M3), then signs the agent in fresh and → `/inbox`.
+- **Single-use links** — the token is bound to the session epoch at issue;
+  completing the reset bumps it, so the link can't be replayed.
+- **"Forgot your password?"** link added to the sign-in page.
+- **No migration, no new deps.** Reuses M4's email + stateless-token pattern.
+  Extracted `lib/signed-token.ts` (three near-identical token modules now);
+  consolidating `session.ts` / `verification.ts` onto it is backlog.
+- Verified by running the whole flow against Neon (throwaway account, deleted).
+
+---
+
 ## M4 (Sept 2026) — Self-serve signup
 
 First Phase-2 milestone. Anyone can create a workspace; no more seed-only
