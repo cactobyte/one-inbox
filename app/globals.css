@@ -172,6 +172,29 @@ button:disabled {
   font-weight: 600;
 }
 
+.conv-row-meta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 400;
+  font-size: 0.8rem;
+}
+
+/* Channel label. One neutral style for every channel — the UI does not
+   distinguish them by type (CLAUDE.md rule 2). */
+.chan {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 30%, transparent);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
 .conv-row-bottom {
   margin-top: 0.15rem;
   font-size: 0.85rem;

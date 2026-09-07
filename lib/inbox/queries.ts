@@ -1,7 +1,8 @@
 import { and, desc, eq, lt, or, sql } from "drizzle-orm";
 
 import type { AppDb } from "@/db";
-import { contact, conversation, message } from "@/db/schema";
+import { channel, contact, conversation, message } from "@/db/schema";
+import type { ChannelType } from "@/db/schema";
 
 import { decodeCursor, encodeCursor } from "./cursor";
 import { NotFoundError } from "./errors";
@@ -12,15 +13,27 @@ import { NotFoundError } from "./errors";
  * no code path that fetches unscoped rows and hides the rest in the UI: a
  * conversation id from another account is indistinguishable from one that
  * doesn't exist at all (NotFoundError, not an empty/filtered result).
+ *
+ * Conversations from every channel come back in one list — there is no
+ * per-channel filter and no `channel.type` branch. Each row carries its
+ * channel so the UI can *label* it (a "LINE" / "Website" tag); the UI never
+ * acts on the type (CLAUDE.md rule 2).
  */
 
 const PAGE_SIZE = 30;
+
+export type ConversationChannel = {
+  id: string;
+  type: ChannelType;
+  name: string;
+};
 
 export type ConversationListItem = {
   id: string;
   status: "open" | "pending" | "resolved";
   unreadCount: number;
   lastMessageAt: Date | null;
+  channel: ConversationChannel;
   contact: { id: string; displayName: string };
   lastMessage: { body: string; direction: "inbound" | "outbound" } | null;
 };
@@ -52,6 +65,9 @@ export async function listConversations(
       status: conversation.status,
       unreadCount: conversation.unreadCount,
       lastMessageAt: conversation.lastMessageAt,
+      channelId: channel.id,
+      channelType: channel.type,
+      channelName: channel.name,
       contactId: contact.id,
       contactName: contact.displayName,
       lastMessageBody: sql<string | null>`(
@@ -69,6 +85,7 @@ export async function listConversations(
     })
     .from(conversation)
     .innerJoin(contact, eq(contact.id, conversation.contactId))
+    .innerJoin(channel, eq(channel.id, conversation.channelId))
     .where(where)
     .orderBy(desc(conversation.lastMessageAt), desc(conversation.id))
     .limit(PAGE_SIZE);
@@ -85,6 +102,7 @@ export async function listConversations(
       status: r.status,
       unreadCount: r.unreadCount,
       lastMessageAt: r.lastMessageAt,
+      channel: { id: r.channelId, type: r.channelType, name: r.channelName },
       contact: { id: r.contactId, displayName: r.contactName },
       lastMessage: r.lastMessageBody
         ? { body: r.lastMessageBody, direction: r.lastMessageDirection! }
@@ -98,6 +116,7 @@ export type OwnedConversation = {
   id: string;
   accountId: string;
   status: "open" | "pending" | "resolved";
+  channel: ConversationChannel;
   contact: { id: string; displayName: string; email: string | null };
 };
 
@@ -112,12 +131,16 @@ export async function getOwnedConversation(
       id: conversation.id,
       accountId: conversation.accountId,
       status: conversation.status,
+      channelId: channel.id,
+      channelType: channel.type,
+      channelName: channel.name,
       contactId: contact.id,
       contactName: contact.displayName,
       contactEmail: contact.email,
     })
     .from(conversation)
     .innerJoin(contact, eq(contact.id, conversation.contactId))
+    .innerJoin(channel, eq(channel.id, conversation.channelId))
     .where(
       and(eq(conversation.id, conversationId), eq(conversation.accountId, accountId)),
     )
@@ -129,6 +152,7 @@ export async function getOwnedConversation(
     id: row.id,
     accountId: row.accountId,
     status: row.status,
+    channel: { id: row.channelId, type: row.channelType, name: row.channelName },
     contact: { id: row.contactId, displayName: row.contactName, email: row.contactEmail },
   };
 }

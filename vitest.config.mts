@@ -11,7 +11,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.ts"],
-    // pglite spins up a fresh in-process Postgres per suite; give it room.
+    // pglite spins up a fresh in-process Postgres per suite (in `beforeEach`
+    // for most). Under enough parallel workers that WASM init alone can pass
+    // the default 10s hook timeout — give both the hook and the test room.
     testTimeout: 20_000,
+    hookTimeout: 30_000,
   },
 });

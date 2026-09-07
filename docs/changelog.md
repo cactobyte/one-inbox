@@ -5,6 +5,27 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M2 (Sept 2026) — Multi-channel inbox
+
+Website and LINE conversations in one list; replies routed to the right
+adapter; the UI never learns which channel a conversation is on.
+
+- **Channel surfaced in the read queries.** `listConversations` and
+  `getOwnedConversation` join `channel` and return `{ id, type, name }` per
+  conversation. Still no per-channel filter — every channel, one list.
+- **Channel label in the UI** (`app/inbox/channel-tag.tsx`). Renders
+  `channel.name`; `channel.type` only rides a `data-channel` attribute. One
+  uniform style for every channel — no `channel.type` branch anywhere in the
+  page/component/route layer.
+- **Reply routing** was already channel-agnostic (`sendReply` →
+  `getAdapter`). M2 adds a `502 delivery_failed` on the reply endpoint for
+  when a platform rejects the push (`OutboundDeliveryError`).
+- **Tests:** a website + a LINE conversation returned together, each tagged;
+  a LINE reply hits the push API (mocked `fetch`), a widget reply calls no
+  API. `vitest` `hookTimeout` raised to 30s for pglite init under load.
+
+---
+
 ## M1 (Sept 2026) — LINE adapter
 
 Second channel. LINE Messaging API webhooks in, agent replies out, through

@@ -289,3 +289,46 @@ access token, public webhook URL) is Boris/Jesper's checkpoint. Covered
 offline: `lib/channels/line/pipeline.test.ts` runs verify → `parseInbound` →
 `ingestInbound` on real (pglite) Postgres, including a batched delivery and a
 redelivery; `adapter.test.ts` mocks `fetch` for the push path.
+
+---
+
+## 2026-09-08 · M2 — Multi-channel inbox
+
+**The inbox was already channel-agnostic; M2 made the channel *visible*, not
+*actionable*.** `listConversations` never filtered by channel and `sendReply`
+already routed outbound via `getAdapter(channel.type)`. The work was: join
+`channel` into the two read queries so each conversation carries
+`{ id, type, name }`, and render that as a label. No `channel.type` branch
+exists in a page, a component, or a route — the label is `channel.name`
+printed verbatim, `type` only rides along on a `data-channel` attribute for
+future styling/tests.
+
+**Channel label styling is deliberately uniform.** One `.chan` style for
+every channel — no per-type colour (not even LINE green). Keying CSS on
+specific `channel.type` values would mean the "channel-agnostic" UI needs an
+edit for every new channel; brand-coloured tags can be a real feature later.
+Backlog.
+
+**`ChannelTag` lives in `app/inbox/`, imported by both pages.** A five-line
+server component. Rejected: inlining it twice (drifts), or a `lib/` home (it
+is JSX, and nothing outside the inbox renders it).
+
+**Reply delivery failure now surfaces as 502.** `POST
+/api/conversations/:id/messages` catches `OutboundDeliveryError` (the adapter
+throwing because the platform rejected the push) and answers `502
+delivery_failed`, alongside the existing 404/400. Before M2 no adapter could
+fail this way — the website `sendOutbound` is a no-op. The row is not written
+on a failed send (delivery is attempted first; an outbox is still backlog).
+
+**`hookTimeout` raised to 30s** (`vitest.config.mts`). Each suite builds a
+fresh pglite in `beforeEach`; with the LINE and M2 suites added, parallel
+WASM init started tripping the default 10s hook timeout on a loaded machine.
+Not a logic failure — the suite is green run serially. The deeper fix (a
+shared fixture, or fewer workers) is backlog.
+
+**Verified by build + tests, not by eye.** `queries.test.ts` asserts a
+website and a LINE conversation come back in one list each tagged with its
+channel; `reply.test.ts` asserts a LINE reply hits the push API with a
+mocked `fetch` and a widget reply calls no API. A live look at the two-
+channel inbox needs a seeded LINE conversation in the shared DB — folded
+into the same LINE-OA checkpoint from M1.

@@ -1,5 +1,6 @@
 import { getCurrentAgent } from "@/lib/auth";
 import { db } from "@/db";
+import { OutboundDeliveryError } from "@/lib/channels/adapter";
 import { NotFoundError, ValidationError } from "@/lib/inbox/errors";
 import { listMessages } from "@/lib/inbox/queries";
 import { sendReply } from "@/lib/inbox/reply";
@@ -40,10 +41,14 @@ export async function GET(request: Request, context: RouteContext) {
 
 /**
  * Post an agent reply into a conversation. The reply is delivered through the
- * conversation's channel adapter and stored as an outbound message.
+ * conversation's channel adapter and stored as an outbound message — the same
+ * path whether the conversation is on the website widget or LINE; this route
+ * never learns which.
  *
  * Auth is the agent session cookie; the write is scoped to the agent's
- * account, so a conversation id from another account resolves to 404.
+ * account, so a conversation id from another account resolves to 404. If the
+ * platform rejects the outbound message the adapter throws
+ * `OutboundDeliveryError` and this answers 502.
  */
 export async function POST(request: Request, context: RouteContext) {
   const agent = await getCurrentAgent();
@@ -84,6 +89,9 @@ export async function POST(request: Request, context: RouteContext) {
     }
     if (error instanceof ValidationError) {
       return jsonError(error.message, 400, "invalid_payload");
+    }
+    if (error instanceof OutboundDeliveryError) {
+      return jsonError(error.message, 502, "delivery_failed");
     }
     throw error;
   }

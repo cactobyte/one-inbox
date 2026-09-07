@@ -9,6 +9,7 @@ import { formatRelativeTime } from "@/lib/format-time";
 import { NotFoundError } from "@/lib/inbox/errors";
 import { getOwnedConversation, listMessages } from "@/lib/inbox/queries";
 
+import { ChannelTag } from "../channel-tag";
 import { ReplyForm } from "./reply-form";
 
 export const metadata: Metadata = { title: "Conversation · One Inbox" };
@@ -38,6 +39,7 @@ export default async function ConversationPage({ params }: PageProps) {
           ← Inbox
         </Link>
         <strong>{conversation.contact.displayName}</strong>
+        <ChannelTag channel={conversation.channel} />
         <span className="muted">{agent.email}</span>
         <form action={logout}>
           <button type="submit" className="link">

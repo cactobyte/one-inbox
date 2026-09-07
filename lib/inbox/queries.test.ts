@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { lineAdapter } from "@/lib/channels/line/adapter";
 import { websiteAdapter } from "@/lib/channels/website/adapter";
 
 import { NotFoundError } from "./errors";
@@ -113,5 +114,84 @@ describe("listConversations shape", () => {
     expect(items).toHaveLength(2);
     expect(items[0].lastMessage).toEqual({ body: "second thread", direction: "inbound" });
     expect(items[1].lastMessage).toEqual({ body: "first thread", direction: "inbound" });
+  });
+});
+
+describe("multi-channel inbox (M2)", () => {
+  it("returns website and LINE conversations in one list, each tagged with its channel", async () => {
+    const accountId = await makeAccount(db);
+    const widget = await makeChannel(db, accountId, {
+      type: "widget",
+      name: "Website",
+    });
+    const line = await makeChannel(db, accountId, {
+      type: "line",
+      name: "LINE",
+      config: { channelSecret: "s" },
+    });
+
+    await seedConversation(accountId, widget, "web-visitor", "from the website");
+    await new Promise((r) => setTimeout(r, 5));
+    await ingestInbound(
+      appDb,
+      line,
+      lineAdapter.parseInbound(
+        {
+          events: [
+            {
+              type: "message",
+              timestamp: 1_700_000_000_000,
+              source: { type: "user", userId: "U_line" },
+              message: { type: "text", id: "line-1", text: "from LINE" },
+            },
+          ],
+        },
+        {},
+      )[0],
+    );
+
+    const { items } = await listConversations(appDb, accountId);
+
+    expect(items).toHaveLength(2);
+    // Both channels present, no filtering by type.
+    expect(items.map((c) => c.channel.type).sort()).toEqual(["line", "widget"]);
+
+    const lineRow = items.find((c) => c.channel.type === "line")!;
+    expect(lineRow.channel.name).toBe("LINE");
+    expect(lineRow.lastMessage?.body).toBe("from LINE");
+    expect(lineRow.channel.id).toBe(line.id);
+  });
+
+  it("getOwnedConversation carries the channel for the detail header", async () => {
+    const accountId = await makeAccount(db);
+    const line = await makeChannel(db, accountId, {
+      type: "line",
+      name: "LINE",
+      config: { channelSecret: "s" },
+    });
+    const inbound = await ingestInbound(
+      appDb,
+      line,
+      lineAdapter.parseInbound(
+        {
+          events: [
+            {
+              type: "message",
+              timestamp: 1_700_000_000_000,
+              source: { type: "user", userId: "U_line" },
+              message: { type: "text", id: "line-1", text: "hi" },
+            },
+          ],
+        },
+        {},
+      )[0],
+    );
+
+    const owned = await getOwnedConversation(
+      appDb,
+      accountId,
+      inbound.conversationId,
+    );
+    expect(owned.channel).toEqual({ id: line.id, type: "line", name: "LINE" });
   });
 });

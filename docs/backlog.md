@@ -77,6 +77,9 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 
 ## Agent inbox
 
+- Channel tags are one uniform style — no per-channel colour/icon (e.g. LINE
+  green). A brand-aware `ChannelTag` is a real feature; deferred to keep the
+  UI free of `channel.type` branching (M2).
 - No live updates on the agent side — a new inbound message needs a
   navigate/refresh. The widget already proves the SSE mechanism both ways;
   this is a second cookie-authenticated consumer, not a new mechanism.
@@ -103,6 +106,9 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
   timing-sensitive logic.
 - One flaky test run (2 of 44) under heavy concurrent load on the shared Neon
   connection; never reproduced in isolation. Look closer if it shows in CI.
+- Every suite builds its own pglite in `beforeEach`; `hookTimeout` is now 30s
+  to absorb parallel WASM init on a loaded machine (M2). A shared per-file or
+  global fixture, or capping workers, would be the real fix.
 
 ## Production / deploy
 

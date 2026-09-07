@@ -7,6 +7,8 @@ import { requireAgent } from "@/lib/auth";
 import { formatRelativeTime } from "@/lib/format-time";
 import { listConversations } from "@/lib/inbox/queries";
 
+import { ChannelTag } from "./channel-tag";
+
 export const metadata: Metadata = { title: "Inbox · One Inbox" };
 
 export default async function InboxPage() {
@@ -30,8 +32,8 @@ export default async function InboxPage() {
           <section className="empty stack">
             <h1>No conversations yet</h1>
             <p className="muted">
-              When a customer sends a message it lands here. Connect the
-              website widget to get started.
+              When a customer sends a message — on any connected channel — it
+              lands here.
             </p>
           </section>
         </main>
@@ -43,14 +45,14 @@ export default async function InboxPage() {
                 <Link href={`/inbox/${c.id}`} className="conv-row">
                   <div className="conv-row-top">
                     <span className="conv-name">{c.contact.displayName}</span>
-                    {c.lastMessageAt ? (
-                      <time
-                        className="muted"
-                        dateTime={c.lastMessageAt.toISOString()}
-                      >
-                        {formatRelativeTime(c.lastMessageAt)}
-                      </time>
-                    ) : null}
+                    <span className="conv-row-meta muted">
+                      <ChannelTag channel={c.channel} />
+                      {c.lastMessageAt ? (
+                        <time dateTime={c.lastMessageAt.toISOString()}>
+                          {formatRelativeTime(c.lastMessageAt)}
+                        </time>
+                      ) : null}
+                    </span>
                   </div>
                   <div className="conv-row-bottom">
                     <span className="conv-preview muted">
