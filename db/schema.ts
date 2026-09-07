@@ -77,6 +77,12 @@ export const agent = pgTable("agent", {
   passwordHash: text("password_hash").notNull(),
   name: text("name").notNull(),
   role: text("role").$type<AgentRole>().notNull().default("agent"),
+  // Bumped to invalidate every existing session for this agent (sign-out-
+  // everywhere, and — from M5 — a password reset). The session cookie carries
+  // the epoch it was minted at; `getCurrentAgent` rejects a mismatch. This is
+  // the per-agent revocation the stateless-cookie design deferred on day 1
+  // (docs/decisions.md), without adding a `session` table.
+  sessionEpoch: integer("session_epoch").notNull().default(0),
   ...timestamps,
 });
 

@@ -7,10 +7,13 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 ## Auth / identity
 
 - Signup / invite flow — no UI creates an agent; the first one is seeded.
-- Per-session revocation — stateless cookies mean rotating `SESSION_SECRET`
-  is the only revoke, and it drops everyone. Consider a token-version column.
+- Global logout is still only "rotate `SESSION_SECRET`" (drops everyone).
+  Per-*agent* revocation now exists (`agent.session_epoch`, M3); a full
+  `session` table for device-level control is still out (needs sign-off —
+  it is the eighth table).
 - `agent.email` is globally unique — the same person can't be an agent in two
   accounts. Would become `unique(account_id, email)` + account selection.
+  Deferred to M6 (M3): decide it when team membership is designed.
 - Password rules, rate limiting, lockout on the login action.
 - Session sliding expiry — currently a fixed 7-day window.
 - The rotated-out demo password sits in git history (commit `2c86e30`).
@@ -96,6 +99,10 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
   (dev-only, dev-server SSRF class). Revisit on the next `drizzle-kit` major.
 - CI does not run `next build` — Vercel does it on deploy. Add to CI if we
   start breaking builds in ways typecheck misses.
+- Nothing runs `db:migrate` automatically — not CI, not the build. A schema
+  migration has to be applied to Neon by hand before/with the deploy that
+  needs it, or the new code 500s. Wire a migrate step (release command or CI
+  job) before a second person is deploying.
 - Seed script uses `node --experimental-strip-types` — fine on Node 22; swap
   for `tsx` or a build step if it gets fragile.
 - Neon `Pool` is never `end()`ed in serverless — no exhaustion seen under
@@ -113,12 +120,14 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 ## Production / deploy
 
 - No separate staging environment — production and local share one Neon
-  database, with scruffy test data live in it. Before real customers: a Neon
-  branch (or second project) for production, previews on their own branch.
-- Three scruffy test conversations on the demo account — left alone rather
-  than editing production data unasked; the runbook starts a fresh one.
-- SSE transient-drop reconnect is unverified end-to-end on live — server
-  `Last-Event-ID` resume and native reconnect-on-reload are both proven, but
-  "wifi blips for 5s, page auto-recovers" wasn't reproducible with the
-  available tooling. Worth a manual DevTools-offline pass, or a Playwright
-  test with `context.setOffline(true)`.
+  database, with scruffy test data live in it. M3 left a runbook
+  (docs/decisions.md): Neon branch for production, previews on `main`. Still
+  needs the owner to run it in the Neon + Vercel consoles.
+- Scruffy test conversations on the demo account — left alone rather than
+  editing production data unasked; the runbook starts a fresh one. M3's live
+  SSE check added one more ("SSE reconnect check …").
+- SSE transient-drop: the socket itself being dropped by the OS/browser (vs.
+  an explicit `fetch`/`EventSource` close) is still only exercised by native
+  `EventSource` behaviour, not a test. M3 verified everything up to that line
+  live (reconnect + `Last-Event-ID` resume, no drop, no dupe). A Playwright
+  test with `context.setOffline(true)` would close the last inch.

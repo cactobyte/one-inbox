@@ -5,6 +5,28 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M3 (Sept 2026) — Hardening
+
+Closed or consciously deferred the four Day-1 flags.
+
+- **SSE transient-drop recovery — verified live.** Drove the "wifi blips
+  mid-conversation" case against the real deployment: reconnect with
+  `Last-Event-ID` delivers a message missed while disconnected exactly once,
+  and repeats nothing. New `stream.test.ts` case for mid-burst resume.
+- **Per-session revocation — shipped.** `agent.session_epoch` (migration
+  `0003`), carried in the session cookie as `epc`; `getCurrentAgent` rejects
+  a stale cookie. `bumpSessionEpoch()` = "sign this agent out everywhere"
+  (M5's password reset will use it). No `session` table.
+- **`agent.email` uniqueness — deferred to M6** (team management), where
+  account membership gets designed. Global-unique keeps login unambiguous
+  for now.
+- **Staging DB — deferred with a runbook** (Neon branch + Vercel env). A
+  console operation on the one shared asset; the code is already portable.
+- **Migration `0003` must run against Neon before/with this deploy** —
+  `getCurrentAgent` selects the new column.
+
+---
+
 ## M2 (Sept 2026) — Multi-channel inbox
 
 Website and LINE conversations in one list; replies routed to the right

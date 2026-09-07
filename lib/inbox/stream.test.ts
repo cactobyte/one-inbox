@@ -101,6 +101,42 @@ describe("fetchMessagesSince — reconnect semantics", () => {
     expect(page2.nextCursor).toBe(page1.nextCursor);
   });
 
+  it("resumes from the id: of ANY event the route emitted, not just the last", async () => {
+    // The SSE route sets `id:` on every event to that row's own cursor
+    // (encodeCursor({ createdAt, id })), not just a page cursor at the end.
+    // A browser that processed only the first of several buffered events
+    // before the socket dropped resends *that* id as Last-Event-ID. Resume
+    // must then return every later message and nothing already seen — this
+    // is the "wifi blipped mid-burst" case.
+    await send("burst-1", "one");
+    await send("burst-2", "two");
+    await send("burst-3", "three");
+
+    const all = await fetchMessagesSince(appDb, conversationId, null);
+    expect(all.messages.map((m) => m.body)).toEqual([
+      "first",
+      "one",
+      "two",
+      "three",
+    ]);
+
+    // Browser saw "first" and "one", then dropped. It resends the id: the
+    // route emitted for "one".
+    const seenThrough = all.messages[1];
+    const lastEventId = encodeCursor({
+      createdAt: seenThrough.createdAt,
+      id: seenThrough.id,
+    });
+
+    const resumed = await fetchMessagesSince(appDb, conversationId, lastEventId);
+    expect(resumed.messages.map((m) => m.body)).toEqual(["two", "three"]);
+
+    // No row is delivered twice across the drop.
+    const before = all.messages.slice(0, 2).map((m) => m.id);
+    const after = resumed.messages.map((m) => m.id);
+    expect(before.filter((id) => after.includes(id))).toEqual([]);
+  });
+
   it("breaks ties on id when two messages share a timestamp", async () => {
     // Comfortably after the seeded "first" message's auto `now()` timestamp,
     // whatever the system clock is when this test runs.

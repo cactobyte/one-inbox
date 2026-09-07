@@ -24,7 +24,11 @@ export async function login(
   }
 
   const [row] = await db
-    .select({ id: agent.id, passwordHash: agent.passwordHash })
+    .select({
+      id: agent.id,
+      passwordHash: agent.passwordHash,
+      sessionEpoch: agent.sessionEpoch,
+    })
     .from(agent)
     .where(eq(agent.email, email))
     .limit(1);
@@ -35,7 +39,7 @@ export async function login(
     return { error: "Email or password is incorrect." };
   }
 
-  await setSessionCookie(row.id);
+  await setSessionCookie(row.id, row.sessionEpoch);
   redirect("/inbox");
 }
 

@@ -332,3 +332,55 @@ channel; `reply.test.ts` asserts a LINE reply hits the push API with a
 mocked `fetch` and a widget reply calls no API. A live look at the two-
 channel inbox needs a seeded LINE conversation in the shared DB — folded
 into the same LINE-OA checkpoint from M1.
+
+---
+
+## 2026-09-08 · M3 — Hardening
+
+The milestone was "close or consciously defer the four Day-1 flags." Two
+resolved, two deferred with a reason.
+
+**Flag 1 — SSE transient-drop recovery: RESOLVED (verified live).** Ran the
+"wifi blips mid-conversation" scenario against the real Vercel deployment
+over HTTP: connect and catch up → drop → a new inbound message arrives while
+disconnected → reconnect sending `Last-Event-ID` → the missed message is
+delivered exactly once, and a further reconnect delivers nothing. No drop, no
+dupe. Also added `stream.test.ts` coverage that resume works from the `id:`
+of *any* event the route emitted, not just the last (the mid-burst case).
+Not exercised: the OS/browser socket itself dropping (vs. an explicit
+`fetch` abort) — that path is native `EventSource` + WHATWG-spec
+`Last-Event-ID` resend, and the server half is now proven both in the suite
+and live. Removed from the backlog.
+
+**Flag 2 — per-session revocation: RESOLVED.** New `agent.session_epoch`
+integer (migration `0003`, `DEFAULT 0 NOT NULL` — additive, existing rows and
+existing cookies both read as 0). The session cookie payload gains `epc`;
+`getCurrentAgent` rejects the cookie if `epc` ≠ the agent row's
+`session_epoch`. `bumpSessionEpoch(db, agentId)` advances it — that is
+"sign out this agent everywhere", and M5's password reset will call it.
+Still no `session` table (a global logout is still "rotate SESSION_SECRET").
+Rejected: a `session` table (the eighth table); a Redis denylist (new infra).
+
+**Flag 3 — `agent.email` global uniqueness: DEFERRED to M6.** Today
+`unique(email)` means email → one agent → one account, so login is an
+unambiguous lookup. Moving to `unique(account_id, email)` to let one person
+work two businesses' inboxes forces an account-selection step into the login
+flow that nothing else needs yet, and it is a Phase-2 product call. M6 (team
+management / invite) is where account membership actually gets designed;
+decide it there. No code change now.
+
+**Flag 4 — staging DB separated from prod: DEFERRED (infra, runbook
+written).** Nothing in the code blocks it — `drizzle.config.ts` and the app
+both take any `DATABASE_URL`. The move is a console operation on the one
+asset a blind change could damage, so it is the owner's to run:
+  1. In Neon, create a branch `production` off `main` (or a second project).
+  2. Point the Vercel **Production** environment's `DATABASE_URL` at that
+     branch's connection string; leave Preview/Development on `main`.
+  3. Enable Neon's Vercel integration for per-preview branches if wanted.
+  4. Run `npm run db:migrate` against the new production branch once.
+Until then, local dev and prod still share one Neon database (backlog).
+
+**Migration `0003` must be applied to the shared Neon DB before/with this
+deploy** — `getCurrentAgent` now selects `session_epoch`, so the column has
+to exist. `npm run db:migrate` against `DATABASE_URL`. (There is still no
+migrate step in CI or the build — backlog.)
