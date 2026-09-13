@@ -6,24 +6,33 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 
 ## Auth / identity
 
-- Invite flow — M4 shipped self-serve signup (a new account + owner);
-  inviting a teammate *into* an existing account is still M6.
-- Never-verified signups accumulate — `account` + `agent` rows are written
-  before the email is confirmed (M4). Add a sweep that deletes unverified
-  agents (and their empty account) after N days.
-- Signup says "that email is already registered" — a mild account-enumeration
-  vector. The privacy-preserving alternative is to always show "check your
-  inbox" and email either a verification link or a "you already have an
-  account" note. Weigh it against the worse UX.
+- Never-verified signups and never-accepted invites accumulate — both are
+  `account`/`agent` rows written before `email_verified_at` is set (M4, M6).
+  Add a sweep that deletes them after N days; for invites, also frees a
+  mistyped-but-never-cancelled email.
+- Signup says "that email is already registered" (M4) and invite says "that
+  email already has a One Inbox account" (M6) — both a mild
+  account-enumeration vector for someone probing addresses. The
+  privacy-preserving alternative is to always say "check your inbox" and
+  email an explanatory note when the address turns out to be taken. Weigh
+  against the worse UX for both flows together.
 - Global logout is still only "rotate `SESSION_SECRET`" (drops everyone).
   Per-*agent* revocation now exists (`agent.session_epoch`, M3); a full
   `session` table for device-level control is still out (needs sign-off —
   it is the eighth table).
-- `agent.email` is globally unique — the same person can't be an agent in two
-  accounts. Would become `unique(account_id, email)` + account selection.
-  Deferred to M6 (M3): decide it when team membership is designed.
-- Rate limiting and lockout on the login, signup, and forgot-password
-  actions; password complexity beyond M4's 8-character minimum.
+- `agent.email` is globally unique by deliberate choice (M6 resolved the M3
+  deferral this way — see docs/decisions.md). One person can't be an agent
+  in two accounts. Real multi-account membership would need
+  `unique(account_id, email)` + an account picker at login, or a membership
+  table (the eighth table) — a bigger change than "basic roles" called for.
+- Admins can be invited but cannot themselves invite, cancel, or resend —
+  only `owner` can (M6). Letting `admin` do the same is a small, deliberate
+  follow-up, not done here.
+- No "remove an active teammate" — `cancelInvite` (M6) only ever deletes a
+  still-pending row by design. Removing someone real needs to reassign their
+  conversations/assignments first; a separate feature.
+- Rate limiting and lockout on the login, signup, forgot-password, and
+  invite actions; password complexity beyond M4's 8-character minimum.
 - Three signed-token modules now: `lib/session.ts`, `lib/verification.ts`,
   and `lib/signed-token.ts` (M5's shared primitive). Fold the first two onto
   the third — `session.ts` needs its `epc` payload carried through.

@@ -490,3 +490,71 @@ Until then, local dev and prod still share one Neon database (backlog).
 deploy** — `getCurrentAgent` now selects `session_epoch`, so the column has
 to exist. `npm run db:migrate` against `DATABASE_URL`. (There is still no
 migrate step in CI or the build — backlog.)
+
+---
+
+## 2026-09-13 · M6 — Team management
+
+**`agent.email` stays globally unique — the M3 deferral is resolved, not
+redesigned.** One person is one agent in one account, same as day one. An
+invite to an email that already has an agent row *anywhere* — active or
+still-pending, in this account or another — is rejected with "that email
+already has a One Inbox account." Real multi-account membership
+(`unique(account_id, email)` + an account picker at login) would be a bigger
+identity change than "basic roles" called for; it needs an eighth table (a
+membership row) or a materially different login flow, either way needs
+sign-off. Rejected here as overreach for this milestone; the limitation is
+explicit and testable rather than silently designed around.
+
+**An invite is a pending `agent` row, not a new table.** `email_verified_at
+IS NULL` doubles as "not yet accepted" — it already meant "hasn't proven
+control of this email" for self-serve signups (M4), and accepting an invite
+*is* proving that, so the same column does both jobs with one honest
+meaning. The row gets an unguessable random password hash
+(`hashPassword(randomBytes(32))`) so it cannot be logged into before
+acceptance; `name` starts as the email until the invitee sets their own.
+
+**Invite links use `lib/signed-token.ts` (M5), no epoch binding.**
+Single-use here doesn't need the epoch trick M5's reset link used — accepting
+an invite flips `email_verified_at` itself, which is the marker.
+`acceptInvite` checks `IS NULL` inside the same transaction as the update, so
+two racing accepts of one link can't both succeed. TTL is 7 days — invites
+sit in inboxes longer than a password reset.
+
+**Cancelling a pending invite is in the WHERE clause, not a second check.**
+Day one: wrote `cancelInvite`'s delete with only an "isn't the owner" guard,
+then caught in review — before running anything — that it would happily
+delete an *active* teammate too, contradicting its own doc comment. Fixed by
+putting `email_verified_at IS NULL` directly in the `DELETE ... WHERE`, which
+is also race-safe against a concurrent accept (Postgres re-evaluates the
+predicate against the current row). "Remove an active teammate" is a real,
+separate feature (reassigning their conversations) — not built.
+
+**Cancel exists specifically so a mistyped invite email isn't stuck
+forever.** Because the email is globally unique, an invite nobody can accept
+would otherwise permanently occupy that address. Verified live: cancelling
+frees the email immediately for a fresh invite.
+
+**Only the owner may invite, cancel, or resend — checked server-side against
+the DB role, not the UI.** `admin` can be invited to but not yet grant
+invites; letting admins invite too is backlog. The non-owner rejection path
+(`inviteTeammate` throwing before any write) has its own test; the UI simply
+never renders the controls for a non-owner, but the server never trusts that.
+
+**No migration.** Everything M6 needs — `email_verified_at`, `session_epoch`,
+`role` with `admin`/`agent`/`owner` — already existed. `checkLogin`/
+`acceptInvite`/`registerAccount` compose without any schema change.
+
+**Verified by running the real thing, without a browser.** The Chrome
+extension wasn't connected this session. Instead: read the exact hidden
+`$ACTION_*` / `$ACTION_ID_*` fields Next.js's server-action progressive-
+enhancement encoding puts in each rendered form (the same mechanism that
+makes `logout`'s plain `<form action={logout}>` work), and replayed real
+multipart POSTs with `curl` against `next dev` on real Neon — invite → the
+real email logged → `/team` shows "invited" with working Resend/Cancel →
+accept sets password and signs in → `/inbox` loads → re-using the same
+accept link fails → logging in with the new password through the *actual*
+`/login` form succeeds → a non-owner's `/team` has no invite form → the
+cancelled email is re-invitable. All test rows deleted after. This is a
+heavier substitute for the browser tool, not a routine one — reach for it
+again only if the browser is genuinely unavailable.

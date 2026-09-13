@@ -19,6 +19,9 @@ export default async function InboxPage() {
     <div className="app">
       <header className="topbar">
         <strong>One Inbox</strong>
+        <Link href="/team" className="link">
+          Team
+        </Link>
         <span className="muted">{agent.email}</span>
         <form action={logout}>
           <button type="submit" className="link">

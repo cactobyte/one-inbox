@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import type { AppDb } from "@/db";
 import { db } from "@/db";
-import { agent } from "@/db/schema";
+import { agent, type AgentRole } from "@/db/schema";
 
 import { getSessionClaims } from "./session";
 
@@ -12,7 +12,7 @@ export type CurrentAgent = {
   accountId: string;
   email: string;
   name: string;
-  role: string;
+  role: AgentRole;
 };
 
 /**

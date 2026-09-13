@@ -5,6 +5,31 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M6 (Sept 2026) — Team management
+
+- **`/team`** — every agent on the account, owner first; owners get an
+  invite form (email + role) and, on pending rows, Resend / Cancel.
+- **Invite by email** creates a pending `agent` row (unusable password
+  hash, `email_verified_at` null) in the owner's account and emails a
+  7-day signed link. `accept-invite` sets the invitee's real name and
+  password, marks the email verified, signs them in, → `/inbox`.
+- **`agent.email` stays globally unique** — the M3-deferred decision,
+  resolved: one person, one agent, one account. Inviting an email that
+  already has an agent row anywhere is rejected, with a clear message.
+- **Cancel** deletes a still-pending invite (never an active teammate —
+  enforced in the delete's `WHERE`, not a separate check) so a mistyped
+  address doesn't permanently occupy that email.
+- Only the owner may invite / cancel / resend, checked against the DB role.
+- No migration — reuses `email_verified_at`, `session_epoch`, and the
+  existing `owner`/`admin`/`agent` roles.
+- Verified by replaying real form submissions (`curl` matching Next's
+  server-action encoding) against `next dev` on Neon — the Chrome
+  extension wasn't available this session. Full invite → accept → login →
+  reuse-rejected → cancel → re-invite cycle, then the throwaway account
+  deleted.
+
+---
+
 ## M5 (Sept 2026) — Password reset
 
 - **`/forgot-password`** — enter email, always get "if that's an account, a

@@ -56,16 +56,25 @@ export async function makeChannel(
 export async function makeAgent(
   db: TestDb,
   accountId: string,
-): Promise<{ id: string; accountId: string }> {
+  options: {
+    role?: schema.AgentRole;
+    email?: string;
+    name?: string;
+    emailVerifiedAt?: Date | null;
+  } = {},
+): Promise<{ id: string; accountId: string; role: schema.AgentRole; email: string }> {
+  const email = options.email ?? `agent${++counter}@example.test`;
+  const role = options.role ?? "agent";
   const [row] = await db
     .insert(schema.agent)
     .values({
       accountId,
-      email: `agent${++counter}@example.test`,
+      email,
       passwordHash: "x",
-      name: "Test Agent",
-      role: "agent",
+      name: options.name ?? "Test Agent",
+      role,
+      emailVerifiedAt: options.emailVerifiedAt ?? null,
     })
     .returning({ id: schema.agent.id });
-  return { id: row.id, accountId };
+  return { id: row.id, accountId, role, email };
 }
