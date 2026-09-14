@@ -86,9 +86,9 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 
 ### Settings/integrations (M7) deferrals
 
-- `CHANNEL_CREDENTIALS_KEY` is not yet set in Vercel's production
-  environment — connecting a real channel on the live deployment 500s until
-  it is (same one-time setup step as `RESEND_API_KEY`/`EMAIL_FROM`).
+- ~~`CHANNEL_CREDENTIALS_KEY` not set in Vercel~~ — set 2026-09-15. Connecting
+  a real channel on the live deployment should work now (not re-verified
+  live since).
 - No edit, disconnect, or reconnect for a connected channel, and no visible
   connection status (last successful webhook, last push failure) — that is
   M8 ("per-tenant channel management") by roadmap design.
@@ -156,8 +156,20 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 
 - No separate staging environment — production and local share one Neon
   database, with scruffy test data live in it. M3 left a runbook
-  (docs/decisions.md): Neon branch for production, previews on `main`. Still
-  needs the owner to run it in the Neon + Vercel consoles.
+  (docs/decisions.md): Neon branch for production, previews on `main`. As of
+  2026-09-15: the owner already has a Neon branch named "production", but it
+  isn't confirmed yet whether that's a genuinely separate/unused branch or
+  just the name of the one branch everything (local + live) already uses —
+  checking the Neon console (Branches tab + each branch's connection host)
+  is the next step, still on the owner. Once confirmed, Claude still needs
+  to run migrations against the new branch before the Vercel `DATABASE_URL`
+  switches over.
+- `RESEND_API_KEY` / `EMAIL_FROM` still not set in Vercel (as of 2026-09-15)
+  — signup confirmation, password reset, and team-invite emails don't
+  actually send yet; they only log server-side. Owner is signing up for
+  Resend's free tier next (`onboarding@resend.dev`, no domain needed, but
+  only delivers to the owner's own Resend-account email until a domain is
+  verified later).
 - Scruffy test conversations on the demo account — left alone rather than
   editing production data unasked; the runbook starts a fresh one. M3's live
   SSE check added one more ("SSE reconnect check …").
