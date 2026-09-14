@@ -101,49 +101,9 @@ if (existingChannel) {
   );
 }
 
-// LINE channel (M1) — only when its credentials are supplied. There is no
-// integrations UI yet (roadmap M7 moves these to encrypted per-tenant
-// storage); until then the channel secret and access token live in
-// `channel.config`, exactly as the widget's inbound token does.
-const lineChannelSecret = process.env.SEED_LINE_CHANNEL_SECRET;
-const lineAccessToken = process.env.SEED_LINE_CHANNEL_ACCESS_TOKEN;
-
-if (lineChannelSecret) {
-  const [existingLine] = await db
-    .select({ id: channel.id })
-    .from(channel)
-    .where(and(eq(channel.accountId, accountId), eq(channel.type, "line")))
-    .limit(1);
-
-  if (existingLine) {
-    await db
-      .update(channel)
-      .set({
-        config: {
-          channelSecret: lineChannelSecret,
-          channelAccessToken: lineAccessToken ?? null,
-        },
-      })
-      .where(eq(channel.id, existingLine.id));
-    console.log(`Updated LINE channel config: ${existingLine.id}`);
-  } else {
-    const [ch] = await db
-      .insert(channel)
-      .values({
-        accountId,
-        type: "line",
-        name: process.env.SEED_LINE_CHANNEL_NAME ?? "LINE",
-        config: {
-          channelSecret: lineChannelSecret,
-          channelAccessToken: lineAccessToken ?? null,
-        },
-      })
-      .returning({ id: channel.id });
-    console.log(`Created LINE channel: ${ch.id}`);
-    console.log(
-      `  Set the LINE webhook URL to https://<deployment>/api/channels/${ch.id}/inbound`,
-    );
-  }
-}
+// LINE (and any future) channel credentials are connected through the
+// Settings UI now (M7, /settings/channels) — encrypted before they reach the
+// database. This script no longer writes them; there is nothing left for a
+// LINE channel to seed.
 
 process.exit(0);

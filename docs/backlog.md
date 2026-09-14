@@ -81,10 +81,24 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - LINE reply-token path unused (tokens expire ~30s); every reply is a push
   and counts against the monthly quota. Consider reply-token when the inbound
   message is fresh.
-- `channelSecret` / `channelAccessToken` sit in `channel.config` plaintext
-  like the widget token — roadmap M7 encrypts channel credentials at rest.
 - No echo/self-message filtering for LINE (it doesn't echo push); Messenger
   will need it.
+
+### Settings/integrations (M7) deferrals
+
+- `CHANNEL_CREDENTIALS_KEY` is not yet set in Vercel's production
+  environment — connecting a real channel on the live deployment 500s until
+  it is (same one-time setup step as `RESEND_API_KEY`/`EMAIL_FROM`).
+- No edit, disconnect, or reconnect for a connected channel, and no visible
+  connection status (last successful webhook, last push failure) — that is
+  M8 ("per-tenant channel management") by roadmap design.
+- No way to rotate a channel's stored credentials without deleting and
+  re-connecting (there's no delete either, currently). Needed once M8 exists.
+- One LINE channel per account is allowed today (no uniqueness enforced,
+  also no reason yet to want two) — revisit if a real use case shows up.
+- `CHANNEL_CREDENTIALS_KEY` rotation makes every connected channel's
+  credentials undecryptable, same trade-off as `SESSION_SECRET` rotation
+  dropping every session. No re-encryption/rotation tooling exists.
 
 ## Widget
 

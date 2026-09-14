@@ -90,7 +90,18 @@ export const agent = pgTable("agent", {
   ...timestamps,
 });
 
-/** A connected inbox: this account's widget, LINE OA, WhatsApp number, ... */
+/**
+ * A connected inbox: this account's widget, LINE OA, WhatsApp number, ...
+ *
+ * `config` is non-secret metadata an adapter needs (the widget's public
+ * inbound token — see docs/decisions.md, day 3: it's a publishable
+ * identifier, not a credential). `credentialsEncrypted` holds anything that
+ * actually is a secret (a LINE channel secret + access token), AES-256-GCM
+ * encrypted (M7) — never stored, logged, or returned to the client in
+ * plaintext. `lib/channels/config.ts#resolveChannelConfig` merges the two
+ * back into the one flat object adapters expect, so no adapter or webhook
+ * verifier needs to know this column exists.
+ */
 export const channel = pgTable("channel", {
   id: uuid("id").primaryKey().defaultRandom(),
   accountId: uuid("account_id")
@@ -99,6 +110,7 @@ export const channel = pgTable("channel", {
   type: text("type").$type<ChannelType>().notNull(),
   name: text("name").notNull(),
   config: jsonb("config").notNull().default(sql`'{}'::jsonb`),
+  credentialsEncrypted: text("credentials_encrypted"),
   ...timestamps,
 });
 

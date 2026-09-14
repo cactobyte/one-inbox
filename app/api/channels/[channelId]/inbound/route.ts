@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { channel as channelTable } from "@/db/schema";
 import { InvalidPayloadError } from "@/lib/channels/adapter";
+import { resolveChannelConfig } from "@/lib/channels/config";
 import { getAdapter, UnknownChannelError } from "@/lib/channels/registry";
 import { verifyInboundWebhook } from "@/lib/channels/verify";
 import { corsPreflight, withCors } from "@/lib/cors";
@@ -44,7 +45,7 @@ export async function POST(request: Request, context: RouteContext) {
     return withCors(jsonError("Unknown channel", 404, "channel_not_found"));
   }
 
-  const config = (channel.config ?? {}) as Record<string, unknown>;
+  const config = resolveChannelConfig(channel);
   const rawBody = await request.text();
 
   const authentic = verifyInboundWebhook(

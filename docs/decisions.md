@@ -558,3 +558,70 @@ accept link fails → logging in with the new password through the *actual*
 cancelled email is re-invitable. All test rows deleted after. This is a
 heavier substitute for the browser tool, not a routine one — reach for it
 again only if the browser is genuinely unavailable.
+
+---
+
+## 2026-09-14 · M7 — Settings/integrations UI
+
+**Secrets get one new nullable column (`channel.credentials_encrypted`), not
+a schema split.** `channel.config` stays exactly what it always was — public,
+non-secret metadata an adapter needs (the widget's inbound token is a
+publishable identifier, not a credential — day 3). Anything actually secret
+(LINE's channel secret + access token) goes in the new column as one
+AES-256-GCM envelope. `lib/channels/config.ts#resolveChannelConfig` merges
+the two back into the flat object adapters/verify already expect, so
+**zero changes to `lib/channels/line/adapter.ts` or `verify.ts`** — M1's code
+is untouched. Rejected: encrypting the whole `config` blob (would touch every
+adapter's config-reading code, including the widget's, for no benefit — the
+widget has nothing secret to protect).
+
+**Encryption — AES-256-GCM via Node's built-in `crypto`, no dependency.**
+Same choice as `scrypt` for passwords, `createHmac` for tokens. GCM is
+authenticated: a tampered or corrupted envelope fails to decrypt instead of
+silently returning garbage (`CredentialsDecryptionError`). One env var,
+`CHANNEL_CREDENTIALS_KEY` (32 bytes, hex or base64) — checked lazily, only
+when a channel with encrypted credentials is actually touched, so the app
+doesn't require it just to boot (same pattern as `SESSION_SECRET`). Rotating
+it makes every previously-connected channel's credentials undecryptable —
+same trade-off `SESSION_SECRET` rotation already has for sessions.
+
+**`db/seed.ts`'s LINE block is deleted, not updated.** It used to write a
+LINE channel's plaintext `channelSecret`/`channelAccessToken` straight into
+`config` from env vars — exactly the pattern M7 exists to retire ("not env
+vars or code"). Keeping it working under the new encrypted-column scheme
+would mean two code paths writing LINE credentials (seed script and
+Settings UI); deleting it means one. `docs/demo.md`'s LINE setup walkthrough
+now points at `/settings/channels` instead of `SEED_LINE_CHANNEL_SECRET`.
+
+**Whole-page owner gate for the connect form, not a route redirect.** Same
+shape as `/team` (M6): any agent can view `/settings/channels` (which
+channels exist, when connected — never credentials), but
+`ConnectLineForm` only renders for the owner, and `connectLineChannel`
+re-checks the role against the DB regardless — the UI omission is not the
+security boundary. Consistent with M6 rather than inventing a second gating
+style for one page.
+
+**No "edit" or "disconnect" yet.** Connecting is the whole of M7; showing
+connection status and letting the owner disable/reconnect a channel is M8
+("per-tenant channel management") by roadmap design — building it now would
+be the same milestone-jumping CLAUDE.md already rules out for adapters.
+
+**Verified against the real, running app and the real database, browser
+this time.** Connected a LINE channel through the actual `/settings/channels`
+form; confirmed in Neon that `credentials_encrypted` is opaque ciphertext
+containing neither typed-in secret anywhere in the row; then **signed a real
+LINE webhook body with the same channel secret and POSTed it to the printed
+webhook URL** — `201 Created`, a conversation and message created — proving
+the decrypt → HMAC-verify → ingest chain is correct against production
+Postgres, not just a mocked test. A wrong signature on the same channel
+still 401s. A non-owner teammate (created through the real M6 invite flow)
+sees the channel list but no connect form. All test rows deleted after.
+
+> **Lesson — the key has to actually be set.** First live attempt 500'd:
+> `CredentialsKeyError: CHANNEL_CREDENTIALS_KEY is not set` — correct,
+> fail-closed behaviour; the key genuinely wasn't in local `.env` yet (it's
+> new in M7, unlike `SESSION_SECRET` which every prior milestone already
+> needed). Generated one, added it to the *local* `.env` (gitignored, never
+> committed), restarted `next dev`, retried — worked. **Vercel's production
+> environment still needs the same variable added** before a real owner can
+> connect a LINE channel on the live deployment; it is not set there yet.

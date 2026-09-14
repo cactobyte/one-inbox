@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import type { AppDb } from "@/db";
 import { channel, conversation, event, message } from "@/db/schema";
+import { resolveChannelConfig } from "@/lib/channels/config";
 import type { NormalisedAttachment } from "@/lib/channels/message";
 import { getAdapter } from "@/lib/channels/registry";
 
@@ -70,7 +71,11 @@ export async function sendReply(
   }
 
   const [channelRow] = await db
-    .select({ type: channel.type, config: channel.config })
+    .select({
+      type: channel.type,
+      config: channel.config,
+      credentialsEncrypted: channel.credentialsEncrypted,
+    })
     .from(channel)
     .where(
       and(
@@ -91,7 +96,7 @@ export async function sendReply(
       attachments,
       thread: { platformId: thread.platformThreadId },
     },
-    (channelRow.config ?? {}) as Record<string, unknown>,
+    resolveChannelConfig(channelRow),
   );
 
   return db.transaction(async (tx): Promise<ReplyResult> => {

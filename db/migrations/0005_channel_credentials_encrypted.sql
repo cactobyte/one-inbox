@@ -1,0 +1,1 @@
+ALTER TABLE "channel" ADD COLUMN "credentials_encrypted" text;

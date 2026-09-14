@@ -172,34 +172,27 @@ If you want to demo from a *real* separate page instead of the hosted
 
 ---
 
-## Connecting a LINE channel (M1, technical prep)
+## Connecting a LINE channel
 
 Not part of the demo script above — this is the one-time setup to get a real
-LINE Official Account flowing into the inbox.
+LINE Official Account flowing into the inbox. Since M7, this is a UI step, not
+an env var or a script.
 
 1. In the [LINE Developers console](https://developers.line.biz/), open the
    Messaging API channel and note its **Channel secret** and a long-lived
    **Channel access token**.
-2. Create the channel row (needs database access):
-
-   ```
-   SEED_AGENT_EMAIL=owner@example.com SEED_AGENT_PASSWORD=... \
-   SEED_LINE_CHANNEL_SECRET=<channel secret> \
-   SEED_LINE_CHANNEL_ACCESS_TOKEN=<access token> \
-   npm run db:seed
-   ```
-
-   It prints the new channel id. Re-running with the same env updates the
-   stored credentials.
-3. In the LINE console, set the **Webhook URL** to
-   `https://<deployment>/api/channels/<channel id>/inbound` and turn
-   **Use webhook** on. "Verify" should return success.
+2. Sign in as the account owner, go to **Channels** (`/settings/channels`),
+   and use "Connect a LINE Official Account" — paste in the name, channel
+   secret, and channel access token. They're encrypted before they're stored
+   (`docs/decisions.md`, M7) and are never shown again.
+3. The page then shows the webhook URL to paste into the LINE console's
+   **Webhook URL** field. Turn **Use webhook** on — "Verify" should succeed.
 4. Message the OA from a personal LINE account — it appears in the inbox as a
    new conversation. An agent reply goes back to LINE as a push message.
 
-Limits in M1: 1:1 chats only, text only (a sticker or image shows as
+Limits (M1): 1:1 chats only, text only (a sticker or image shows as
 `[sticker]` / `[image]`), and the contact shows as "LINE user" until the
-profile lookup lands. See `docs/decisions.md` (M1) and `docs/backlog.md`.
+profile lookup lands. See `docs/decisions.md` (M1, M7) and `docs/backlog.md`.
 
 ---
 

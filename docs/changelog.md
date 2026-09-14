@@ -5,6 +5,33 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M7 (Sept 2026) — Settings/integrations UI
+
+- **`/settings/channels`** — every agent sees which channels are connected
+  and when; the owner also gets "Connect a LINE Official Account" (name +
+  channel secret + channel access token), which shows the webhook URL to
+  paste into the LINE console once connected.
+- **Credentials encrypted at rest** — a new nullable `channel
+  .credentials_encrypted` column, AES-256-GCM (Node's built-in `crypto`, no
+  new dependency). `channel.config` stays for genuinely public metadata
+  (the widget's inbound token); secrets never touch it.
+- **`lib/channels/config.ts#resolveChannelConfig`** merges the two back into
+  the flat config object adapters already expect — zero changes to the LINE
+  adapter or webhook verifier from M1.
+- **`db/seed.ts`'s LINE-via-env-vars block is gone** — the whole point of
+  M7 is not env vars or code. `docs/demo.md` now points at the UI.
+- New env: `CHANNEL_CREDENTIALS_KEY` (32 bytes). Needed only once a channel
+  with real credentials is connected; not required for the widget.
+- Verified against the real app and real Neon, in a real browser this
+  session: connected a LINE channel, confirmed the stored row is genuinely
+  encrypted, then signed and POSTed a real LINE webhook to the printed
+  webhook URL — `201 Created`, proving decrypt → verify → ingest end to
+  end (a wrong signature still 401s). Test rows deleted after.
+- **`CHANNEL_CREDENTIALS_KEY` is not yet set on Vercel** — connecting a
+  channel on the live deployment will 500 until it is.
+
+---
+
 ## M6 (Sept 2026) — Team management
 
 - **`/team`** — every agent on the account, owner first; owners get an

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { channel as channelTable } from "@/db/schema";
 import { tokenMatches } from "@/lib/channel-auth";
+import { resolveChannelConfig } from "@/lib/channels/config";
 import { corsPreflight, withCors } from "@/lib/cors";
 import { jsonError } from "@/lib/http";
 import { encodeCursor, type Cursor } from "@/lib/inbox/cursor";
@@ -67,7 +68,7 @@ export async function GET(request: Request, context: RouteContext) {
     return withCors(jsonError("Unknown channel", 404, "channel_not_found"));
   }
 
-  const config = (channel.config ?? {}) as Record<string, unknown>;
+  const config = resolveChannelConfig(channel);
   if (!tokenMatches(token, config.inboundToken)) {
     return withCors(jsonError("Invalid channel token", 401, "unauthorised"));
   }
