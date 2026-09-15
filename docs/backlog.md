@@ -185,14 +185,13 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - ~~`RESEND_API_KEY` / `EMAIL_FROM` not set in Vercel~~ — set and redeployed
   2026-09-15, `onboarding@resend.dev` sandbox sender (only delivers to the
   owner's own Resend-account email until a domain is verified). A live test
-  signup afterward completed with no server error, but `sendEmail`'s
-  failure path is caught-and-swallowed with no logging (signup, resend,
-  forgot-password, and invite actions all do this) — so that's not proof it
-  actually delivered, only proof it didn't crash. Check Resend's own
-  dashboard "Logs" tab, or sign up/reset with the Resend account's own
-  email address and watch the inbox, for real confirmation. Adding
-  `console.error` in those catches (so a real failure is at least visible in
-  Vercel's runtime logs) is a small, safe follow-up — not done yet.
+  signup completed with no server error — not proof of actual delivery,
+  since `sendEmail`'s failure path was caught-and-swallowed with no logging.
+  ~~Fixed~~ (commit `e4aba65`): every email-send catch now logs the error, so
+  a real failure shows up in Vercel's runtime logs even though the user
+  still sees the same success message. Still true either way: for real
+  confirmation, check Resend's own dashboard "Logs" tab, or sign up/reset
+  with the Resend account's own email address and watch the inbox.
 - Scruffy test conversations on the demo account — left alone rather than
   editing production data unasked; the runbook starts a fresh one. M3's live
   SSE check added one more ("SSE reconnect check …").
