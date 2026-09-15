@@ -52,9 +52,11 @@ export async function signup(
   const { subject, text } = verificationEmail(link);
   try {
     await sendEmail({ to: input.email, subject, text });
-  } catch {
+  } catch (error) {
     // The account exists; don't fail the signup on a mail hiccup. The agent
-    // can use "resend" from the sign-in page.
+    // can use "resend" from the sign-in page. Still logged — otherwise a
+    // real delivery failure is invisible on both sides.
+    console.error("[signup] sendEmail failed", error);
   }
 
   return { done: true };
@@ -74,8 +76,9 @@ export async function resendVerification(
     const { subject, text } = verificationEmail(link);
     try {
       await sendEmail({ to: agent.email, subject, text });
-    } catch {
-      // Swallow — reported the same either way.
+    } catch (error) {
+      // Reported the same either way — but still logged.
+      console.error("[resend-verification] sendEmail failed", error);
     }
   }
   return { sent: true };

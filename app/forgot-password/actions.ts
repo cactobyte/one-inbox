@@ -29,8 +29,10 @@ export async function requestReset(
     const { subject, text } = passwordResetEmail(link);
     try {
       await sendEmail({ to: agent.email, subject, text });
-    } catch {
-      // Reported the same either way; a resend is a page refresh away.
+    } catch (error) {
+      // Reported the same either way; a resend is a page refresh away. Still
+      // logged — a silent failure here is otherwise invisible on both sides.
+      console.error("[forgot-password] sendEmail failed", error);
     }
   }
 

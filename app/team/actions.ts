@@ -52,8 +52,10 @@ export async function invite(
   const { subject, text } = inviteEmail(link, await accountName(current.accountId));
   try {
     await sendEmail({ to: email.trim().toLowerCase(), subject, text });
-  } catch {
-    // The invite row exists either way; "resend" covers a mail hiccup.
+  } catch (error) {
+    // The invite row exists either way; "resend" covers a mail hiccup. Still
+    // logged — otherwise a real delivery failure is invisible on both sides.
+    console.error("[invite] sendEmail failed", error);
   }
 
   return { sent: email };
@@ -84,8 +86,10 @@ export async function resendInvite(formData: FormData): Promise<void> {
   const { subject, text } = inviteEmail(link, await accountName(current.accountId));
   try {
     await sendEmail({ to: email, subject, text });
-  } catch {
-    // Reported the same either way — the owner can hit "resend" again.
+  } catch (error) {
+    // Reported the same either way — the owner can hit "resend" again. Still
+    // logged — otherwise a real delivery failure is invisible on both sides.
+    console.error("[resend-invite] sendEmail failed", error);
   }
 
   redirect("/team");
