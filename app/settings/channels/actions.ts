@@ -1,9 +1,16 @@
 "use server";
 
+import { redirect } from "next/navigation";
+
 import { db } from "@/db";
 import { appOrigin } from "@/lib/app-url";
 import { requireAgent } from "@/lib/auth";
-import { connectLineChannel, ChannelSettingsError } from "@/lib/channel-settings";
+import {
+  ChannelSettingsError,
+  connectLineChannel,
+  reconnectLineChannel,
+  setChannelEnabled,
+} from "@/lib/channel-settings";
 
 export type ConnectLineState = {
   error?: string;
@@ -34,4 +41,45 @@ export async function connectLine(
 
   const webhookUrl = `${await appOrigin()}/api/channels/${channelId}/inbound`;
   return { connected: { channelId, webhookUrl } };
+}
+
+/** Owner-only: pause or resume a channel. Plain action, no client state. */
+export async function toggleChannel(formData: FormData): Promise<void> {
+  const current = await requireAgent();
+  const channelId = String(formData.get("channelId") ?? "");
+  const enabled = formData.get("enabled") === "true";
+  await setChannelEnabled(
+    db,
+    { accountId: current.accountId, role: current.role },
+    channelId,
+    enabled,
+  );
+  redirect("/settings/channels");
+}
+
+export type ReconnectLineState = { error?: string; done?: boolean };
+
+/** Owner-only: replace a LINE channel's stored credentials. */
+export async function reconnectLine(
+  _prev: ReconnectLineState,
+  formData: FormData,
+): Promise<ReconnectLineState> {
+  const current = await requireAgent();
+  const channelId = String(formData.get("channelId") ?? "");
+  const channelSecret = String(formData.get("channelSecret") ?? "");
+  const channelAccessToken = String(formData.get("channelAccessToken") ?? "");
+
+  try {
+    await reconnectLineChannel(
+      db,
+      { accountId: current.accountId, role: current.role },
+      channelId,
+      { channelSecret, channelAccessToken },
+    );
+  } catch (error) {
+    if (error instanceof ChannelSettingsError) return { error: error.message };
+    throw error;
+  }
+
+  return { done: true };
 }

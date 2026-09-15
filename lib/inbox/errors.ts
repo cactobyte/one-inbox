@@ -14,6 +14,14 @@ export class ValidationError extends Error {
   }
 }
 
+/** The conversation's channel is paused (M8) — no reply can go out through it. */
+export class ChannelDisabledError extends Error {
+  constructor(message = "This channel is disabled") {
+    super(message);
+    this.name = "ChannelDisabledError";
+  }
+}
+
 /** True for a Postgres unique-constraint violation (SQLSTATE 23505). */
 export function isUniqueViolation(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;

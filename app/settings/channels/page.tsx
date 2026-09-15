@@ -6,7 +6,9 @@ import { requireAgent } from "@/lib/auth";
 import { listChannels } from "@/lib/channel-settings";
 import { formatRelativeTime } from "@/lib/format-time";
 
+import { toggleChannel } from "./actions";
 import { ConnectLineForm } from "./connect-line-form";
+import { ReconnectLineForm } from "./reconnect-line-form";
 
 export const metadata: Metadata = { title: "Channels · One Inbox" };
 
@@ -28,16 +30,54 @@ export default async function ChannelsPage() {
       <main className="team-main stack">
         <ul className="team-list">
           {channels.map((c) => (
-            <li key={c.id} className="team-row">
-              <div className="team-row-info">
-                <span className="team-name">{c.name}</span>
-                <span className="muted">
-                  Connected {formatRelativeTime(c.createdAt)}
-                </span>
+            <li key={c.id} className="team-row stack">
+              <div className="team-row">
+                <div className="team-row-info">
+                  <span className="team-name">{c.name}</span>
+                  <span className="muted">
+                    Connected {formatRelativeTime(c.createdAt)}
+                    {c.lastInboundAt
+                      ? ` · last received ${formatRelativeTime(c.lastInboundAt)}`
+                      : " · no messages yet"}
+                  </span>
+                </div>
+                <div className="team-row-meta">
+                  <span className="chan" data-channel={c.type}>
+                    {c.type}
+                  </span>
+                  <span className="chan" data-status={c.enabled ? "enabled" : "disabled"}>
+                    {c.enabled ? "enabled" : "disabled"}
+                  </span>
+                  {isOwner ? (
+                    <form action={toggleChannel}>
+                      <input type="hidden" name="channelId" value={c.id} />
+                      <input
+                        type="hidden"
+                        name="enabled"
+                        value={c.enabled ? "false" : "true"}
+                      />
+                      <button type="submit" className="link">
+                        {c.enabled ? "Disable" : "Enable"}
+                      </button>
+                    </form>
+                  ) : null}
+                </div>
               </div>
-              <span className="chan" data-channel={c.type}>
-                {c.type}
-              </span>
+
+              {c.lastError ? (
+                <p className="error channel-error">
+                  Last delivery failed{" "}
+                  {c.lastErrorAt ? formatRelativeTime(c.lastErrorAt) : ""}:{" "}
+                  {c.lastError}
+                </p>
+              ) : null}
+
+              {isOwner && c.type === "line" ? (
+                <details>
+                  <summary className="link">Reconnect (replace credentials)</summary>
+                  <ReconnectLineForm channelId={c.id} />
+                </details>
+              ) : null}
             </li>
           ))}
         </ul>

@@ -89,16 +89,34 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - ~~`CHANNEL_CREDENTIALS_KEY` not set in Vercel~~ — set 2026-09-15. Connecting
   a real channel on the live deployment should work now (not re-verified
   live since).
-- No edit, disconnect, or reconnect for a connected channel, and no visible
-  connection status (last successful webhook, last push failure) — that is
-  M8 ("per-tenant channel management") by roadmap design.
-- No way to rotate a channel's stored credentials without deleting and
-  re-connecting (there's no delete either, currently). Needed once M8 exists.
+- ~~No reconnect / no visible connection status~~ — shipped in M8: enable/
+  disable, last-inbound and last-error status, and a credentials-replace
+  ("Reconnect") action.
 - One LINE channel per account is allowed today (no uniqueness enforced,
   also no reason yet to want two) — revisit if a real use case shows up.
 - `CHANNEL_CREDENTIALS_KEY` rotation makes every connected channel's
   credentials undecryptable, same trade-off as `SESSION_SECRET` rotation
   dropping every session. No re-encryption/rotation tooling exists.
+
+### Per-tenant channel management (M8) deferrals
+
+- No "remove/delete" a channel at all — only enable/disable. Deleting one
+  with real conversation history hanging off it (`message.channel_id` etc.)
+  is a materially bigger, riskier feature than pausing it; not attempted.
+- No UI edit for a channel's *name* — only its credentials (Reconnect) and
+  its enabled state.
+- `lastError` only ever comes from an outbound send failure — an inbound
+  webhook that fails signature verification is not recorded anywhere
+  per-channel (deliberately, to avoid false alarms from URL scanning/
+  probing — see docs/decisions.md). If real "webhook keeps failing"
+  debugging is ever needed, that's a different, opt-in feature.
+- No notification (email, etc.) when `lastError` is set — the owner has to
+  visit `/settings/channels` to notice a channel is failing. Fine for one
+  channel and one owner today; revisit if that stops being true.
+- Disabling a channel does not hide its existing conversations from the
+  inbox — they stay fully visible, but an agent typing a reply only finds
+  out it's blocked (403) on send, with nothing in the conversation view
+  itself hinting the channel is paused. Revisit if that's ever confusing.
 
 ## Widget
 

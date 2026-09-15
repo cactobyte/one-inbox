@@ -1,8 +1,9 @@
+import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OutboundDeliveryError } from "@/lib/channels/adapter";
 import { lineAdapter } from "@/lib/channels/line/adapter";
-import { message } from "@/db/schema";
+import { channel, message } from "@/db/schema";
 import {
   makeAccount,
   makeAgent,
@@ -11,6 +12,7 @@ import {
   type TestDb,
 } from "@/test/db";
 
+import { ChannelDisabledError } from "./errors";
 import { ingestInbound } from "./ingest";
 import { sendReply } from "./reply";
 
@@ -133,5 +135,59 @@ describe("sendReply routes by channel", () => {
     // Nothing persisted — delivery is attempted before the DB write.
     const rows = await db.select().from(message);
     expect(rows.filter((m) => m.direction === "outbound")).toHaveLength(0);
+  });
+
+  it("records the failure on the channel row (M8 status)", async () => {
+    const accountId = await makeAccount(db);
+    const agent = await makeAgent(db, accountId);
+    const line = await makeChannel(db, accountId, {
+      type: "line",
+      name: "LINE",
+      config: { channelSecret: "s", channelAccessToken: "cat-1" },
+    });
+    const inbound = await ingestInbound(appDb, line, lineInbound("hello?", "in-1"));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response('{"message":"bad token"}', { status: 401 })),
+    );
+    await expect(
+      sendReply(appDb, agent, inbound.conversationId, { body: "hi" }),
+    ).rejects.toBeInstanceOf(OutboundDeliveryError);
+
+    const [row] = await db.select().from(channel).where(eq(channel.id, line.id));
+    expect(row.lastError).toContain("401");
+    expect(row.lastErrorAt).toBeInstanceOf(Date);
+
+    // A later successful send clears it.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: 200 })),
+    );
+    await sendReply(appDb, agent, inbound.conversationId, { body: "hi again" });
+    const [cleared] = await db.select().from(channel).where(eq(channel.id, line.id));
+    expect(cleared.lastError).toBeNull();
+    expect(cleared.lastErrorAt).toBeNull();
+  });
+
+  it("refuses to send through a disabled channel", async () => {
+    const accountId = await makeAccount(db);
+    const agent = await makeAgent(db, accountId);
+    const line = await makeChannel(db, accountId, {
+      type: "line",
+      name: "LINE",
+      config: { channelSecret: "s", channelAccessToken: "cat-1" },
+    });
+    const inbound = await ingestInbound(appDb, line, lineInbound("hello?", "in-1"));
+
+    await db.update(channel).set({ disabledAt: new Date() }).where(eq(channel.id, line.id));
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      sendReply(appDb, agent, inbound.conversationId, { body: "hi" }),
+    ).rejects.toBeInstanceOf(ChannelDisabledError);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -2,11 +2,17 @@ import { and, eq } from "drizzle-orm";
 
 import type { AppDb } from "@/db";
 import { channel, conversation, event, message } from "@/db/schema";
+import { OutboundDeliveryError } from "@/lib/channels/adapter";
 import { resolveChannelConfig } from "@/lib/channels/config";
 import type { NormalisedAttachment } from "@/lib/channels/message";
 import { getAdapter } from "@/lib/channels/registry";
+import {
+  isChannelEnabled,
+  recordOutboundError,
+  recordOutboundSuccess,
+} from "@/lib/channels/status";
 
-import { NotFoundError, ValidationError } from "./errors";
+import { ChannelDisabledError, NotFoundError, ValidationError } from "./errors";
 
 export type ReplyActor = {
   id: string;
@@ -72,9 +78,11 @@ export async function sendReply(
 
   const [channelRow] = await db
     .select({
+      id: channel.id,
       type: channel.type,
       config: channel.config,
       credentialsEncrypted: channel.credentialsEncrypted,
+      disabledAt: channel.disabledAt,
     })
     .from(channel)
     .where(
@@ -88,16 +96,28 @@ export async function sendReply(
   if (!channelRow) {
     throw new NotFoundError("Channel not found");
   }
+  if (!isChannelEnabled(channelRow)) {
+    throw new ChannelDisabledError();
+  }
 
   const adapter = getAdapter(channelRow.type);
-  const sent = await adapter.sendOutbound(
-    {
-      body,
-      attachments,
-      thread: { platformId: thread.platformThreadId },
-    },
-    resolveChannelConfig(channelRow),
-  );
+  let sent;
+  try {
+    sent = await adapter.sendOutbound(
+      {
+        body,
+        attachments,
+        thread: { platformId: thread.platformThreadId },
+      },
+      resolveChannelConfig(channelRow),
+    );
+  } catch (error) {
+    if (error instanceof OutboundDeliveryError) {
+      await recordOutboundError(db, channelRow.id, error.message);
+    }
+    throw error;
+  }
+  await recordOutboundSuccess(db, channelRow.id);
 
   return db.transaction(async (tx): Promise<ReplyResult> => {
     const [messageRow] = await tx

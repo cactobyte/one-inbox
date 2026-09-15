@@ -5,6 +5,32 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M8 (Sept 2026) — Per-tenant channel management
+
+- **`/settings/channels`** now shows, per channel: enabled/disabled, when it
+  last received a verified webhook, and its most recent send failure (if
+  any) — no dashboard, three nullable columns on `channel`.
+- **Enable/disable**, owner-only. Disabled blocks the inbound webhook (403
+  `channel_disabled`) and blocks agent replies through it (403); the
+  widget's SSE stream is unaffected.
+- **Reconnect** — owner-only form to replace a LINE channel's stored
+  credentials without deleting/recreating it (keeps its conversation
+  history). Separate action from enabling; reconnecting a disabled channel
+  leaves it disabled.
+- Outbound send failures (e.g. an expired LINE access token) are now
+  recorded on the channel and cleared by the next successful send. Inbound
+  *verification* failures deliberately do not set this — only a real send
+  failure does, so the status doesn't cry wolf from webhook-URL noise.
+- Migration `0006`: `disabled_at`, `last_inbound_at`, `last_error`,
+  `last_error_at` — all nullable, no backfill, applied to Neon before push.
+- Verified against the real app and real Neon over HTTP (browser
+  unavailable this session, same curl-replay approach as M6/M7): connect →
+  webhook succeeds and status updates → disable → same webhook now 403s →
+  re-enable → works again → reconnect with new credentials → old secret
+  401s, new secret 201s. Test data deleted after.
+
+---
+
 ## M7 (Sept 2026) — Settings/integrations UI
 
 - **`/settings/channels`** — every agent sees which channels are connected

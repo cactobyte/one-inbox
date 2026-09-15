@@ -5,6 +5,7 @@ import { channel as channelTable } from "@/db/schema";
 import { InvalidPayloadError } from "@/lib/channels/adapter";
 import { resolveChannelConfig } from "@/lib/channels/config";
 import { getAdapter, UnknownChannelError } from "@/lib/channels/registry";
+import { isChannelEnabled, recordInboundSuccess } from "@/lib/channels/status";
 import { verifyInboundWebhook } from "@/lib/channels/verify";
 import { corsPreflight, withCors } from "@/lib/cors";
 import { ingestInbound, type IngestResult } from "@/lib/inbox/ingest";
@@ -45,6 +46,10 @@ export async function POST(request: Request, context: RouteContext) {
     return withCors(jsonError("Unknown channel", 404, "channel_not_found"));
   }
 
+  if (!isChannelEnabled(channel)) {
+    return withCors(jsonError("This channel is disabled", 403, "channel_disabled"));
+  }
+
   const config = resolveChannelConfig(channel);
   const rawBody = await request.text();
 
@@ -56,6 +61,11 @@ export async function POST(request: Request, context: RouteContext) {
   if (!authentic) {
     return withCors(jsonError("Webhook verification failed", 401, "unauthorised"));
   }
+
+  // Authentic means the credentials on file actually work — the "is this
+  // channel connected?" signal M8's status display uses. A parse/payload
+  // error after this point doesn't undo that.
+  await recordInboundSuccess(db, channel.id);
 
   let payload: unknown;
   try {

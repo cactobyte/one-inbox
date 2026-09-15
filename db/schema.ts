@@ -111,6 +111,14 @@ export const channel = pgTable("channel", {
   name: text("name").notNull(),
   config: jsonb("config").notNull().default(sql`'{}'::jsonb`),
   credentialsEncrypted: text("credentials_encrypted"),
+  // Per-tenant channel management (M8). Null/non-null timestamps as status
+  // flags — the same style as `agent.email_verified_at` — rather than a
+  // separate status table or an event log; there's exactly one fact each one
+  // records.
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  lastError: text("last_error"),
   ...timestamps,
 });
 

@@ -1,7 +1,7 @@
 import { getCurrentAgent } from "@/lib/auth";
 import { db } from "@/db";
 import { OutboundDeliveryError } from "@/lib/channels/adapter";
-import { NotFoundError, ValidationError } from "@/lib/inbox/errors";
+import { ChannelDisabledError, NotFoundError, ValidationError } from "@/lib/inbox/errors";
 import { listMessages } from "@/lib/inbox/queries";
 import { sendReply } from "@/lib/inbox/reply";
 import { jsonError, jsonOk } from "@/lib/http";
@@ -48,7 +48,8 @@ export async function GET(request: Request, context: RouteContext) {
  * Auth is the agent session cookie; the write is scoped to the agent's
  * account, so a conversation id from another account resolves to 404. If the
  * platform rejects the outbound message the adapter throws
- * `OutboundDeliveryError` and this answers 502.
+ * `OutboundDeliveryError` and this answers 502. If the owner has paused the
+ * channel (M8) this answers 403 before ever calling the adapter.
  */
 export async function POST(request: Request, context: RouteContext) {
   const agent = await getCurrentAgent();
@@ -92,6 +93,9 @@ export async function POST(request: Request, context: RouteContext) {
     }
     if (error instanceof OutboundDeliveryError) {
       return jsonError(error.message, 502, "delivery_failed");
+    }
+    if (error instanceof ChannelDisabledError) {
+      return jsonError(error.message, 403, "channel_disabled");
     }
     throw error;
   }

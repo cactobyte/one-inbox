@@ -625,3 +625,56 @@ sees the channel list but no connect form. All test rows deleted after.
 > committed), restarted `next dev`, retried — worked. **Vercel's production
 > environment still needs the same variable added** before a real owner can
 > connect a LINE channel on the live deployment; it is not set there yet.
+
+---
+
+## 2026-09-15 · M8 — Per-tenant channel management
+
+**Three facts, three nullable columns — no status table, no event log.**
+`disabledAt` (owner paused it), `lastInboundAt` (a webhook verified and was
+processed), `lastError`/`lastErrorAt` (the most recent *outbound* delivery
+failure). Same style as `agent.email_verified_at` — a null/non-null
+timestamp answering exactly one question — rather than a `status` enum or a
+per-channel event stream. CLAUDE.md already rules out an analytics
+dashboard; this is the minimum that makes "see connection status" true.
+
+**`lastError` only ever comes from a failed *send*, never a failed inbound
+verification.** A bad/unsigned request to the webhook URL (a scanner probing
+it, a fat-fingered LINE console "Verify" retry) is not evidence the
+channel's credentials are broken — only a push actually failing is. Setting
+`lastError` on every failed verification would make the status display cry
+wolf from internet noise. `lastInboundAt`, by contrast, only moves forward
+on a *verified* request, so it stays a meaningful "still receiving" signal.
+
+**Disabling blocks inbound and outbound; it does not touch the SSE
+stream.** A disabled channel's webhook 403s (`channel_disabled`) before any
+processing, and `sendReply` refuses to call the adapter
+(`ChannelDisabledError` → 403 at the route). The widget's *stream* endpoint
+(reading already-ingested history) is left alone — disabling is "pause new
+activity on this integration," not "cut off a visitor mid-page-load" for a
+read-only endpoint that was never the direction being paused.
+
+**Reconnect and re-enable are two separate actions, not one.** Replacing a
+LINE channel's credentials (`reconnectLineChannel`) does not touch
+`disabledAt`. An owner might want to fix credentials while deliberately
+keeping a channel paused a bit longer, or might disable a channel for a
+reason unrelated to credentials (rate limiting a noisy integration, say).
+Verified live: reconnecting with new credentials leaves a disabled channel
+disabled.
+
+**No new table for "connection status," and no delete for a channel.**
+Deleting a connected channel — with real conversations hanging off it via
+`channel_id` — is a materially different, riskier operation (what happens to
+the history?) than anything M8 asked for. Not built; noted in backlog.
+
+**Verified against the real app, real Neon, real HTTP** (browser still
+unavailable this session — same curl-replays-the-server-action approach as
+M6/M7). Connected a LINE channel, sent a real signed webhook → `201` and
+`last_inbound_at` set → confirmed on `/settings/channels` ("last received
+… ago"). Disabled it → the *same* signed webhook now `403`s
+(`channel_disabled`). Re-enabled → webhook works again. Used the Reconnect
+form to replace the channel's credentials → the *old* secret's signature now
+`401`s, the *new* secret's `201`s. Test account deleted after.
+
+**Migration `0006`** (four nullable columns) applied to Neon before this was
+pushed — no backfill needed, existing rows read as enabled/no-history/no-error.

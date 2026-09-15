@@ -8,7 +8,12 @@ import { resolveChannelConfig } from "@/lib/channels/config";
 import { getAdapter } from "@/lib/channels/registry";
 import { makeAccount, makeTestDb, type TestDb } from "@/test/db";
 
-import { connectLineChannel, listChannels } from "./channel-settings";
+import {
+  connectLineChannel,
+  listChannels,
+  reconnectLineChannel,
+  setChannelEnabled,
+} from "./channel-settings";
 
 let db: TestDb;
 let appDb: Awaited<ReturnType<typeof makeTestDb>>["appDb"];
@@ -130,5 +135,125 @@ describe("listChannels", () => {
     expect(summary).not.toHaveProperty("credentialsEncrypted");
     expect(summary).not.toHaveProperty("config");
     expect(JSON.stringify(summary)).not.toContain("line-channel-secret");
+  });
+
+  it("reports enabled, last-inbound, and last-error status (M8)", async () => {
+    const accountId = await makeAccount(db);
+    const { channelId } = await connectLineChannel(
+      appDb,
+      { accountId, role: "owner" },
+      lineInput,
+    );
+
+    const [fresh] = await listChannels(appDb, accountId);
+    expect(fresh).toMatchObject({
+      enabled: true,
+      lastInboundAt: null,
+      lastError: null,
+      lastErrorAt: null,
+    });
+
+    await setChannelEnabled(appDb, { accountId, role: "owner" }, channelId, false);
+    const [disabled] = await listChannels(appDb, accountId);
+    expect(disabled.enabled).toBe(false);
+  });
+});
+
+describe("setChannelEnabled", () => {
+  it("an owner can disable then re-enable a channel", async () => {
+    const accountId = await makeAccount(db);
+    const { channelId } = await connectLineChannel(
+      appDb,
+      { accountId, role: "owner" },
+      lineInput,
+    );
+
+    await setChannelEnabled(appDb, { accountId, role: "owner" }, channelId, false);
+    let [row] = await db.select().from(channel).where(eq(channel.id, channelId));
+    expect(row.disabledAt).toBeInstanceOf(Date);
+
+    await setChannelEnabled(appDb, { accountId, role: "owner" }, channelId, true);
+    [row] = await db.select().from(channel).where(eq(channel.id, channelId));
+    expect(row.disabledAt).toBeNull();
+  });
+
+  it("rejects a non-owner", async () => {
+    const accountId = await makeAccount(db);
+    const { channelId } = await connectLineChannel(
+      appDb,
+      { accountId, role: "owner" },
+      lineInput,
+    );
+    await expect(
+      setChannelEnabled(appDb, { accountId, role: "agent" }, channelId, false),
+    ).rejects.toMatchObject({ code: "not_owner" });
+  });
+
+  it("refuses to touch another account's channel", async () => {
+    const accountA = await makeAccount(db);
+    const accountB = await makeAccount(db);
+    const { channelId } = await connectLineChannel(
+      appDb,
+      { accountId: accountA, role: "owner" },
+      lineInput,
+    );
+    await expect(
+      setChannelEnabled(appDb, { accountId: accountB, role: "owner" }, channelId, false),
+    ).rejects.toMatchObject({ code: "not_found" });
+
+    const [row] = await db.select().from(channel).where(eq(channel.id, channelId));
+    expect(row.disabledAt).toBeNull();
+  });
+});
+
+describe("reconnectLineChannel", () => {
+  it("replaces the stored credentials without touching disabledAt", async () => {
+    const accountId = await makeAccount(db);
+    const { channelId } = await connectLineChannel(
+      appDb,
+      { accountId, role: "owner" },
+      lineInput,
+    );
+    await setChannelEnabled(appDb, { accountId, role: "owner" }, channelId, false);
+
+    await reconnectLineChannel(appDb, { accountId, role: "owner" }, channelId, {
+      channelSecret: "new-secret",
+      channelAccessToken: "new-token",
+    });
+
+    const [row] = await db.select().from(channel).where(eq(channel.id, channelId));
+    // Still disabled — reconnecting credentials is not the same as re-enabling.
+    expect(row.disabledAt).toBeInstanceOf(Date);
+    expect(resolveChannelConfig(row)).toEqual({
+      channelSecret: "new-secret",
+      channelAccessToken: "new-token",
+    });
+  });
+
+  it("rejects a non-owner and a non-LINE channel", async () => {
+    const accountId = await makeAccount(db);
+    const { channelId } = await connectLineChannel(
+      appDb,
+      { accountId, role: "owner" },
+      lineInput,
+    );
+
+    await expect(
+      reconnectLineChannel(appDb, { accountId, role: "agent" }, channelId, {
+        channelSecret: "x",
+        channelAccessToken: "y",
+      }),
+    ).rejects.toMatchObject({ code: "not_owner" });
+
+    const [widget] = await db
+      .insert(channel)
+      .values({ accountId, type: "widget", name: "Website", config: {} })
+      .returning({ id: channel.id });
+    await expect(
+      reconnectLineChannel(appDb, { accountId, role: "owner" }, widget.id, {
+        channelSecret: "x",
+        channelAccessToken: "y",
+      }),
+    ).rejects.toMatchObject({ code: "wrong_type" });
   });
 });
