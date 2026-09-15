@@ -182,12 +182,17 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
   is the next step, still on the owner. Once confirmed, Claude still needs
   to run migrations against the new branch before the Vercel `DATABASE_URL`
   switches over.
-- `RESEND_API_KEY` / `EMAIL_FROM` still not set in Vercel (as of 2026-09-15)
-  — signup confirmation, password reset, and team-invite emails don't
-  actually send yet; they only log server-side. Owner is signing up for
-  Resend's free tier next (`onboarding@resend.dev`, no domain needed, but
-  only delivers to the owner's own Resend-account email until a domain is
-  verified later).
+- ~~`RESEND_API_KEY` / `EMAIL_FROM` not set in Vercel~~ — set and redeployed
+  2026-09-15, `onboarding@resend.dev` sandbox sender (only delivers to the
+  owner's own Resend-account email until a domain is verified). A live test
+  signup afterward completed with no server error, but `sendEmail`'s
+  failure path is caught-and-swallowed with no logging (signup, resend,
+  forgot-password, and invite actions all do this) — so that's not proof it
+  actually delivered, only proof it didn't crash. Check Resend's own
+  dashboard "Logs" tab, or sign up/reset with the Resend account's own
+  email address and watch the inbox, for real confirmation. Adding
+  `console.error` in those catches (so a real failure is at least visible in
+  Vercel's runtime logs) is a small, safe follow-up — not done yet.
 - Scruffy test conversations on the demo account — left alone rather than
   editing production data unasked; the runbook starts a fresh one. M3's live
   SSE check added one more ("SSE reconnect check …").
