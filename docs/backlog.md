@@ -208,12 +208,12 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
   bug here. That failure is now logged server-side too (commit `e4aba65`),
   which is how it was actually diagnosed. Still needed before real users can
   receive mail: a verified domain in Resend, `EMAIL_FROM` updated to use it.
-- `STRIPE_WEBHOOK_SECRET` is a self-signed placeholder in local `.env`, not
-  a real Stripe-issued secret (M9) — add a webhook endpoint pointing at
-  `/api/billing/webhook` in the Stripe dashboard once there's a deployed
-  URL for it, then use the signing secret Stripe gives back, in both local
-  `.env` and Vercel. Until then the webhook route works (verified against a
-  self-signed test) but nothing real reaches it.
+- ~~`STRIPE_WEBHOOK_SECRET` is a self-signed placeholder~~ — set 2026-09-16.
+  Real Stripe-issued secret, endpoint added in the Stripe dashboard pointing
+  at `/api/billing/webhook`, confirmed live: an unsigned request correctly
+  gets `401`, and a genuine Stripe-signed `customer.subscription.created`
+  event (from a throwaway test customer/subscription, deleted after)
+  processed with `200`.
 - Scruffy test conversations on the demo account — left alone rather than
   editing production data unasked; the runbook starts a fresh one. M3's live
   SSE check added one more ("SSE reconnect check …").
