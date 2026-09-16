@@ -5,6 +5,33 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M9 (Sept 2026) — Billing scaffolding
+
+- **`/settings/billing`** — current plan (free/pro) and subscription status;
+  the owner gets "Upgrade to Pro" (Stripe Checkout) or, once subscribed,
+  "Manage billing" (Stripe's hosted Customer Portal — cancel, update card,
+  invoices, no custom UI needed).
+- **`account.plan`** (`"free" | "pro"`) plus three Stripe id/status columns
+  — no new table. `plan` defaults `"free"` for every account.
+- **`/api/billing/webhook`** keeps `plan`/`subscription_status` in sync —
+  signature-verified (hand-rolled, matching Stripe's own scheme, thoroughly
+  tested), idempotent by construction (it always sets the latest state, so
+  a Stripe retry is harmless).
+- **No feature gating on `plan` anywhere** — this milestone is plumbing
+  only, exactly as scoped; a real product decision for later.
+- Created a placeholder test-mode Stripe Price so checkout had something to
+  point at — swap for real pricing whenever that's decided.
+- Verified against real Stripe's test-mode API and real Neon: a live
+  checkout session, then hand-signed the three webhook events a real
+  completed checkout produces and POSTed them to the real route — customer
+  linked, plan flipped to pro, page updated, a bad signature 401s,
+  cancellation reverted to free. Test data deleted after.
+- **`STRIPE_WEBHOOK_SECRET` isn't real yet** — needs a webhook endpoint
+  added in the Stripe dashboard pointing at the deployed URL, which then
+  issues the real signing secret.
+
+---
+
 ## M8 (Sept 2026) — Per-tenant channel management
 
 - **`/settings/channels`** now shows, per channel: enabled/disabled, when it

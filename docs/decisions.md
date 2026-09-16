@@ -678,3 +678,76 @@ form to replace the channel's credentials → the *old* secret's signature now
 
 **Migration `0006`** (four nullable columns) applied to Neon before this was
 pushed — no backfill needed, existing rows read as enabled/no-history/no-error.
+
+---
+
+## 2026-09-16 · M9 — Billing scaffolding
+
+**Plan lives on `account`, not a `plan`/`subscription` table.** Four columns
+— `plan`, `stripe_customer_id`, `stripe_subscription_id`,
+`subscription_status` — same reasoning as every prior milestone's status
+fields: one account, one active subscription, nothing here needs its own
+rows. `plan` is a plain `"free" | "pro"` union (not a Postgres enum), same
+as `ChannelType` — a second tier is a product decision away, not a
+migration away.
+
+**Stripe over `fetch`, no `stripe` npm dependency.** Same call as LINE
+(M1) and Resend (M4): the REST API is plain form-encoded HTTP, an SDK buys
+convenience methods this app doesn't need yet. `lib/stripe.ts` is the one
+place that knows the request shapes; `lib/billing.ts` never touches the
+network directly.
+
+**The webhook is the only writer of plan/status; checkout only links the
+customer.** `checkout.session.completed` sets `stripe_customer_id` (via
+`client_reference_id`, Stripe's own recommended way to correlate a session
+back to our row without needing a customer to exist first) but does *not*
+set `plan` — payment isn't confirmed at that point, a `customer.subscription
+.*` event is. Reusing one handler for `created`/`updated`/`deleted` (they
+carry the same shape) keeps this to one function instead of three near-
+duplicates; `deleted` is just an update whose status happens to be
+"canceled".
+
+**Only `active`/`trialing` grant "pro"; everything else — `past_due`,
+`unpaid`, `canceled`, `incomplete*` — reads as "free".** A placeholder
+policy: nothing in the app gates a feature on `plan` yet (that's a real
+product decision, explicitly out of scope for M9 per the roadmap), so this
+has zero functional effect today. It only decides what the status chip
+says. Revisit when a feature actually needs to check it — e.g. a grace
+period for `past_due` might be the right call then and isn't now.
+
+**No feature gating, anywhere, on purpose.** The roadmap is explicit
+("does not need real pricing decided yet — just the plumbing") and CLAUDE.md
+rules out inventing scope. `/settings/billing` shows the plan and lets the
+owner start/manage a subscription; nothing else in the app reads
+`account.plan`.
+
+**Webhook signature verification — Stripe's own `t=...,v1=...` scheme,
+hand-rolled.** HMAC-SHA256 over `${timestamp}.${rawBody}`, a 5-minute replay
+tolerance (Stripe's own documented default), and every `v1` in the header
+checked (Stripe sends more than one during a signing-secret rotation).
+Thoroughly unit tested — this is money-adjacent, exactly what CLAUDE.md's
+testing rule calls out.
+
+**Verified against real Stripe and real Neon over HTTP** (browser
+unavailable again — same curl-replay approach as M6–M8, plus this time
+actually calling Stripe's live test-mode API, not just mine). Created a
+placeholder test-mode Price (`price_1UGEBrIUMKnEHi7P54NkAjn6`, "One Inbox
+Pro (TEST placeholder)", $29/mo — a stand-in so checkout had something real
+to point at; swap it for real pricing whenever that's decided, nothing
+depends on this exact price surviving). "Upgrade to Pro" → a real
+`checkout.stripe.com` URL. Hand-signed and POSTed the three webhook events a
+real completed checkout produces (`checkout.session.completed`,
+`customer.subscription.created`, `customer.subscription.deleted`) — customer
+linked, plan flipped to "pro" with the right status, page updated to
+"Manage billing", a wrong signature `401`s, cancellation dropped the account
+back to "free". Test account deleted after.
+
+**`STRIPE_WEBHOOK_SECRET` is not yet a real one.** The local `.env` value
+used for the live test above is self-signed for that test only, not issued
+by Stripe — a real one only exists once a webhook endpoint pointing at
+`/api/billing/webhook` is added in the Stripe dashboard, which needs the
+deployed URL (same chicken-and-egg as every prior milestone's webhook
+setup). Still open — see docs/backlog.md.
+
+**Migration `0007`** (four nullable columns, `plan` defaults `'free'`)
+applied to Neon before this was pushed.

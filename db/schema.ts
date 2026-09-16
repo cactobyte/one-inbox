@@ -38,6 +38,13 @@ export type MessageDirection = "inbound" | "outbound";
 export type MessageAuthorType = "contact" | "agent" | "system";
 export type AgentRole = "owner" | "admin" | "agent";
 
+/**
+ * Billing scaffolding (M9). Only "free" and "pro" exist because only one
+ * paid tier is being wired up — same reasoning as `ChannelType`: a plain
+ * union, not a Postgres enum, because it will grow.
+ */
+export type AccountPlan = "free" | "pro";
+
 /** Conversation lifecycle events written to the append-only `event` table. */
 export type EventType =
   | "created"
@@ -60,10 +67,25 @@ const timestamps = {
     .defaultNow(),
 };
 
-/** The customer business. Everything else hangs off this. */
+/**
+ * The customer business. Everything else hangs off this.
+ *
+ * Billing (M9): `plan` defaults to "free" for every account, including
+ * every one that existed before this migration — no backfill needed.
+ * `stripeCustomerId`/`stripeSubscriptionId`/`subscriptionStatus` stay null
+ * until an owner actually starts a checkout; the webhook handler
+ * (`lib/billing.ts`) is the only writer of all four columns after that.
+ */
 export const account = pgTable("account", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
+  plan: text("plan").$type<AccountPlan>().notNull().default("free"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  // Mirrors Stripe's own subscription.status verbatim ("active", "trialing",
+  // "past_due", "canceled", "unpaid", "incomplete", ...) rather than a
+  // narrower union — Stripe's own set is not itself frozen.
+  subscriptionStatus: text("subscription_status"),
   ...timestamps,
 });
 

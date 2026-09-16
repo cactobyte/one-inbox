@@ -25,6 +25,9 @@ export default async function InboxPage() {
         <Link href="/settings/channels" className="link">
           Channels
         </Link>
+        <Link href="/settings/billing" className="link">
+          Billing
+        </Link>
         <span className="muted">{agent.email}</span>
         <form action={logout}>
           <button type="submit" className="link">

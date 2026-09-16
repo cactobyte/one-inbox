@@ -118,6 +118,24 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
   out it's blocked (403) on send, with nothing in the conversation view
   itself hinting the channel is paused. Revisit if that's ever confusing.
 
+## Billing (M9)
+
+- No feature gating on `account.plan` anywhere — deliberately out of scope
+  for M9 ("just the plumbing"). Deciding what "pro" actually unlocks is a
+  real product call for later.
+- `past_due`/`unpaid`/`incomplete*` all read as "free" immediately, no
+  grace period. A placeholder policy with zero effect today since nothing
+  checks `plan` yet; revisit once something does.
+- No handling for `invoice.payment_failed` or any other Stripe event beyond
+  the three checkout/subscription ones — currently a silent 200 no-op for
+  anything else. Add more as real behaviour needs them.
+- The test-mode "One Inbox Pro (TEST placeholder)" Price
+  (`price_1UGEBrIUMKnEHi7P54NkAjn6`, $29/mo) created to exercise checkout
+  is a stand-in, not a pricing decision — replace `STRIPE_PRICE_ID` (and
+  archive/rename the placeholder in Stripe) once real pricing exists.
+- No multi-seat / per-agent pricing consideration yet — one plan per
+  account, flat. Not asked for; note it in case it becomes relevant.
+
 ## Widget
 
 - No visitor merge / no cross-device identity — clearing `localStorage`,
@@ -182,16 +200,20 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
   is the next step, still on the owner. Once confirmed, Claude still needs
   to run migrations against the new branch before the Vercel `DATABASE_URL`
   switches over.
-- ~~`RESEND_API_KEY` / `EMAIL_FROM` not set in Vercel~~ — set and redeployed
-  2026-09-15, `onboarding@resend.dev` sandbox sender (only delivers to the
-  owner's own Resend-account email until a domain is verified). A live test
-  signup completed with no server error — not proof of actual delivery,
-  since `sendEmail`'s failure path was caught-and-swallowed with no logging.
-  ~~Fixed~~ (commit `e4aba65`): every email-send catch now logs the error, so
-  a real failure shows up in Vercel's runtime logs even though the user
-  still sees the same success message. Still true either way: for real
-  confirmation, check Resend's own dashboard "Logs" tab, or sign up/reset
-  with the Resend account's own email address and watch the inbox.
+- ~~`RESEND_API_KEY` / `EMAIL_FROM` not set in Vercel~~ — set 2026-09-15.
+  Confirmed working as designed: a live test send to a non-owner address
+  was correctly rejected by Resend with `403 validation_error` — the
+  `onboarding@resend.dev` sandbox sender only delivers to the email the
+  Resend account itself is registered under, by Resend's own policy, not a
+  bug here. That failure is now logged server-side too (commit `e4aba65`),
+  which is how it was actually diagnosed. Still needed before real users can
+  receive mail: a verified domain in Resend, `EMAIL_FROM` updated to use it.
+- `STRIPE_WEBHOOK_SECRET` is a self-signed placeholder in local `.env`, not
+  a real Stripe-issued secret (M9) — add a webhook endpoint pointing at
+  `/api/billing/webhook` in the Stripe dashboard once there's a deployed
+  URL for it, then use the signing secret Stripe gives back, in both local
+  `.env` and Vercel. Until then the webhook route works (verified against a
+  self-signed test) but nothing real reaches it.
 - Scruffy test conversations on the demo account — left alone rather than
   editing production data unasked; the runbook starts a fresh one. M3's live
   SSE check added one more ("SSE reconnect check …").
