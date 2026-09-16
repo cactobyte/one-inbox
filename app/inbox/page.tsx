@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { requireAgent } from "@/lib/auth";
 import { formatRelativeTime } from "@/lib/format-time";
 import { listConversations } from "@/lib/inbox/queries";
+import { getOnboardingStatus } from "@/lib/onboarding";
 
 import { ChannelTag } from "./channel-tag";
 
@@ -13,12 +14,20 @@ export const metadata: Metadata = { title: "Inbox · One Inbox" };
 
 export default async function InboxPage() {
   const agent = await requireAgent();
-  const { items } = await listConversations(db, agent.accountId);
+  const [{ items }, onboarding] = await Promise.all([
+    listConversations(db, agent.accountId),
+    agent.role === "owner" ? getOnboardingStatus(db, agent.accountId) : null,
+  ]);
 
   return (
     <div className="app">
       <header className="topbar">
         <strong>One Inbox</strong>
+        {onboarding && !onboarding.complete ? (
+          <Link href="/onboarding" className="link">
+            Get started
+          </Link>
+        ) : null}
         <Link href="/team" className="link">
           Team
         </Link>

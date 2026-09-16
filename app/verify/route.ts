@@ -11,8 +11,10 @@ import { markEmailVerified, readVerificationToken } from "@/lib/verification";
  * `/verify?token=<signed token>`.
  *
  * Marks the agent's email verified (idempotent — a second click is fine),
- * signs them in, and drops them at the inbox. A bad or expired token sends
- * them to sign-in with a note offering to resend.
+ * signs them in, and drops them at onboarding (M10) — this is a brand-new
+ * account's actual first login, and onboarding's own checklist handles
+ * "already done" gracefully either way. A bad or expired token sends them to
+ * sign-in with a note offering to resend.
  */
 export async function GET(request: Request): Promise<Response> {
   const token = new URL(request.url).searchParams.get("token") ?? undefined;
@@ -31,5 +33,5 @@ export async function GET(request: Request): Promise<Response> {
   await markEmailVerified(db, row.id);
   await setSessionCookie(row.id, row.sessionEpoch);
 
-  return NextResponse.redirect(new URL("/inbox", request.url));
+  return NextResponse.redirect(new URL("/onboarding", request.url));
 }

@@ -5,6 +5,29 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M10 (Sept 2026) — Onboarding flow
+
+- **`/onboarding`** — a checklist for a brand-new account: connect a channel,
+  invite a teammate. Both link to the real pages already built (M6, M7);
+  this milestone is a status view, not new capability.
+- **No new column, no eighth table.** Completeness is derived from data
+  that already exists — any `channel` row, any non-owner `agent` row
+  (`lib/onboarding.ts`) — the same flag-free style as `channel.disabledAt`.
+- `/verify` (the link in the signup email) now lands a fresh owner on
+  `/onboarding` instead of `/inbox` — that's the account's actual first
+  login. Invited teammates (`/accept-invite`) still land on `/inbox`
+  directly; the two onboarding steps are owner-only actions.
+- Skippable at any time ("Skip for now"), and reachable again later from a
+  "Get started" link in the inbox nav that only shows for an owner with an
+  incomplete checklist.
+- Verified live against real Neon: minted a real verification token for a
+  throwaway account, confirmed `/verify` redirects to `/onboarding` with
+  both steps "not done", inserted a real channel + a real pending teammate,
+  confirmed the checklist flips to "done" and the inbox nav link
+  disappears. Throwaway account deleted after.
+
+---
+
 ## M9 (Sept 2026) — Billing scaffolding
 
 - **`/settings/billing`** — current plan (free/pro) and subscription status;

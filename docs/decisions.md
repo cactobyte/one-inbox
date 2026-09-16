@@ -751,3 +751,38 @@ setup). Still open — see docs/backlog.md.
 
 **Migration `0007`** (four nullable columns, `plan` defaults `'free'`)
 applied to Neon before this was pushed.
+
+## 2026-09-16 · M10 — Onboarding flow
+
+**No new schema.** "Connect a channel" and "invite a teammate" are already
+tracked facts — any `channel` row, any non-owner `agent` row — so
+`lib/onboarding.ts` derives completeness from `SELECT ... LIMIT 1` on each
+rather than adding a flag on `account` (would've been the eighth table's
+worth of state creeping onto the seventh) or a dedicated `onboarding_state`
+column that could drift from reality. Rejected: a `completed_at` column set
+once and never revisited — it can't un-set itself if someone later deletes
+their only channel, and derived-from-data means it never needs to.
+
+**Triggered from `/verify`, not `/login`.** The actual first login for a new
+account is the moment the owner clicks the email confirmation link — that
+route already signs them in and picks a redirect target, so onboarding is
+one line there (`/inbox` → `/onboarding`) rather than new logic in the
+regular login path checked on every sign-in. Invited teammates
+(`/accept-invite`) still go straight to `/inbox`: both onboarding steps are
+owner-only actions (only an owner can invite or connect a channel), so
+walking a teammate through them would just show two links they can't use.
+
+**Skippable, not enforced.** No redirect guard forces an incomplete account
+back to `/onboarding` — "Skip for now" always works, and the checklist stays
+reachable later via a "Get started" link that appears in the inbox nav only
+for an owner whose checklist isn't done yet. Matches the roadmap's own
+"doesn't need to be polished, needs to exist."
+
+**Verified against real Neon** (browser unavailable, same curl-replay
+approach as every milestone since M4): minted a real HMAC-signed
+verification token for a throwaway account/owner, hit `/verify` and
+confirmed the `307` redirect target is `/onboarding` with a real session
+cookie set, fetched `/onboarding` and confirmed both steps render "not
+done", inserted a real `line` channel row and a real pending-invite `agent`
+row directly, re-fetched and confirmed both flip to "done" and the inbox
+nav's "Get started" link disappears. Throwaway account deleted after.
