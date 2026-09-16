@@ -38,7 +38,9 @@ export default async function ConversationPage({ params }: PageProps) {
         <Link href="/inbox" className="link">
           ← Inbox
         </Link>
-        <strong>{conversation.contact.displayName}</strong>
+        <Link href={`/contacts/${conversation.contact.id}`} className="link">
+          <strong>{conversation.contact.displayName}</strong>
+        </Link>
         <ChannelTag channel={conversation.channel} />
         <span className="muted">{agent.email}</span>
         <form action={logout}>

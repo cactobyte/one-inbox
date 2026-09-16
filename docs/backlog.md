@@ -136,6 +136,22 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - No multi-seat / per-agent pricing consideration yet — one plan per
   account, flat. Not asked for; note it in case it becomes relevant.
 
+## Contact/CRM (M11) deferrals
+
+- No contacts directory/list page — the only way to reach a contact profile
+  is via a conversation's header link. Roadmap M11 only asked for the
+  profile itself; a browsable list is a real, separate feature.
+- No contact merge UI — already tracked under "Data model" above
+  (`merged_into_id`). M11's cross-channel history works once two
+  conversations point at the same `contact.id`; nothing creates that link
+  automatically yet.
+- No manual "create a contact" (e.g. add a note before they've messaged in)
+  — every contact today is created by an inbound message.
+- Notes are a single free-text field with no edit history and no author —
+  overwritten wholesale on every save, last writer wins, no audit trail.
+- No editing a contact's email/phone from the UI — those are only ever set
+  by an adapter's `parseInbound` payload.
+
 ## Widget
 
 - No visitor merge / no cross-device identity — clearing `localStorage`,

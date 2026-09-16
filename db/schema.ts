@@ -163,6 +163,10 @@ export const contact = pgTable(
     displayName: text("display_name").notNull(),
     email: text("email"),
     phone: text("phone"),
+    // Free-text notes an agent keeps on this contact (M11). Nothing else in
+    // the app reads or writes it — plain CRM scratch space, not a history log
+    // (that's what `message`/`event` are for).
+    notes: text("notes"),
     ...timestamps,
   },
   (t) => [

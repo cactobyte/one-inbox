@@ -57,6 +57,13 @@
       "when": 1789546741701,
       "tag": "0007_account_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789568568518,
+      "tag": "0008_contact_notes",
+      "breakpoints": true
     }
   ]
 }

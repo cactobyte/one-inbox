@@ -5,6 +5,25 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M11 (Sept 2026) — Contact/CRM basics
+
+- **`/contacts/[id]`** — a contact profile: email/phone, a free-text notes
+  field, and every conversation for that contact across every channel
+  ("History across channels"), each linking back into the real conversation
+  view. Reached from a conversation's header (contact name is now a link).
+- **`contact.notes`** — one new nullable column (migration `0008`). No new
+  table, no edit history kept.
+- No new linking needed for cross-channel history: `contact` was already
+  account-scoped rather than channel-scoped, so `lib/contacts.ts` just
+  queries every `conversation` for a `contactId`, unfiltered by channel.
+- Verified live in an actual browser against real Neon: seeded a throwaway
+  account + a real inbound message, signed in, clicked through from the
+  conversation to the contact profile, saved notes, reloaded cold and
+  confirmed the notes persisted in Neon, confirmed a random contact id
+  404s. Throwaway account deleted after.
+
+---
+
 ## M10 (Sept 2026) — Onboarding flow
 
 - **`/onboarding`** — a checklist for a brand-new account: connect a channel,

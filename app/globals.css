@@ -352,3 +352,43 @@ button:disabled {
 .chan[data-status="disabled"] {
   opacity: 0.6;
 }
+
+/* --- contact profile ----------------------------------------------------- */
+
+.contact-main {
+  max-width: 40rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+  gap: 1.5rem;
+}
+
+.contact-details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+}
+
+.contact-details dt {
+  opacity: 0.6;
+}
+
+.notes-form textarea {
+  min-height: 6rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--foreground) 25%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+.notes-form button {
+  align-self: flex-start;
+}
+
+.contact-conv-list {
+  max-width: none;
+  margin: 0;
+}

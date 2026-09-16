@@ -786,3 +786,48 @@ cookie set, fetched `/onboarding` and confirmed both steps render "not
 done", inserted a real `line` channel row and a real pending-invite `agent`
 row directly, re-fetched and confirmed both flip to "done" and the inbox
 nav's "Get started" link disappears. Throwaway account deleted after.
+
+---
+
+## 2026-09-16 · M11 — Contact/CRM basics
+
+**No new table, one new column.** `contact` is already account-scoped, not
+channel-scoped — `lib/inbox/ingest.ts`'s upsert keys on
+`(accountId, platformContactId)`, and `conversation.contactId` can point at
+that contact from any channel. So "history across all channels" needed no
+new linking, just a query (`lib/contacts.ts#listContactConversations`) that
+joins `conversation` → `channel` on `contactId` with no channel filter — the
+same shape as `listConversations`, scoped by contact instead of by nothing.
+"Notes" is one nullable `contact.notes` text column (migration `0008`): free
+text, no edit history, exactly the minimum CLAUDE.md's seven-table cap
+allows without a real reason to add an eighth.
+
+**Cross-channel merge is still not built — this only proves the query
+works once a contact spans channels.** `docs/decisions.md` (day 3) already
+flagged contact merge as unsolved: today a contact only ends up linked to
+two channels if something manually points a second `conversation.contactId`
+at it, which nothing in the product does yet. `lib/contacts.test.ts`
+exercises that by reassigning a `conversation` row directly, proving
+`listContactConversations` returns both channels correctly *when* the link
+exists — a real "merge these two contacts" feature is still backlog.
+
+**Entry point is a link from the conversation view, not a contacts
+directory.** `/inbox/[conversationId]` → contact name → `/contacts/[id]`.
+Roadmap M11 asked for "contact profile shows history across all channels,
+basic notes field," not a browsable contacts list; a directory page is a
+real, separate feature and would be inventing scope. Backlog if wanted.
+
+**Notes form is a plain server action + redirect, not `useActionState`.**
+Same shape as `app/team/actions.ts`'s cancel/resend — no client-side pending
+state was worth a `"use client"` component for a single textarea.
+
+**Verified against the real, running app, in an actual browser this
+time** (`connect-chrome` was available this session, unlike M6–M10). Seeded
+a throwaway account/owner and a widget channel directly against Neon,
+POSTed a real inbound webhook to create a real conversation + contact,
+migrated `0008` onto Neon, then in Chrome: logged in for real, opened the
+conversation, clicked through to `/contacts/[id]`, saw the real message
+under "History across channels," typed notes and saved, reloaded the page
+cold and confirmed the notes round-tripped through Neon (not just client
+state), and confirmed a random contact id 404s. Throwaway account deleted
+after (cascade).
