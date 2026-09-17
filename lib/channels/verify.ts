@@ -2,6 +2,7 @@ import type { ChannelType } from "@/db/schema";
 import { tokenMatches } from "@/lib/channel-auth";
 
 import { verifyLineWebhook } from "./line/verify";
+import { verifyWhatsAppWebhook } from "./whatsapp/verify";
 
 /**
  * Webhook authenticity, keyed on channel type.
@@ -30,6 +31,7 @@ type Verifier = (auth: WebhookAuth, config: Record<string, unknown>) => boolean;
 
 const VERIFIERS: Partial<Record<ChannelType, Verifier>> = {
   line: verifyLineWebhook,
+  whatsapp: verifyWhatsAppWebhook,
 };
 
 /** The default for any channel without a platform-specific verifier. */

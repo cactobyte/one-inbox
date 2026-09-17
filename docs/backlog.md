@@ -84,6 +84,29 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - No echo/self-message filtering for LINE (it doesn't echo push); Messenger
   will need it.
 
+### WhatsApp (M12) deferrals
+
+- No settings UI — a WhatsApp channel can only be created by inserting a
+  `channel` row directly (as done for the pipeline tests). Extending
+  `/settings/channels` to a second channel type (a connect form, a
+  `connectWhatsAppChannel`-style function, `phoneNumberId`/`accessToken`/
+  `appSecret`/`verifyToken` fields) is real, separate scope.
+- Not verified against real Meta infrastructure — no real WhatsApp Business
+  number, app secret, or public webhook URL was available this session.
+  Boris/Jesper's checkpoint, same as M1's live LINE round-trip.
+- WhatsApp inbound media (image/video/audio/document/sticker) becomes a
+  placeholder body with no attachment — needs a second authenticated call
+  to fetch the media URL by id, plus blob storage, then real
+  `NormalisedAttachment`s. Same shape as LINE's equivalent deferral.
+- WhatsApp outbound is text-only and throws on an attachment-only reply.
+- No handling for WhatsApp's 24-hour customer-service-window rule — a send
+  outside that window (without a pre-approved template message) will just
+  surface as an `OutboundDeliveryError` from the platform's own rejection,
+  with no template-message fallback built.
+- No `messaging_product`/`statuses` (delivery/read receipt) handling —
+  `parseInbound` only reads `value.messages`; status updates for our own
+  outbound sends are ignored, not stored anywhere.
+
 ### Settings/integrations (M7) deferrals
 
 - ~~`CHANNEL_CREDENTIALS_KEY` not set in Vercel~~ — set 2026-09-15. Connecting

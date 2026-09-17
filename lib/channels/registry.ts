@@ -3,6 +3,7 @@ import type { ChannelType } from "@/db/schema";
 import type { ChannelAdapter } from "./adapter";
 import { lineAdapter } from "./line/adapter";
 import { websiteAdapter } from "./website/adapter";
+import { whatsappAdapter } from "./whatsapp/adapter";
 
 /**
  * The one place that maps a channel type to its adapter. Every other part of
@@ -12,6 +13,7 @@ import { websiteAdapter } from "./website/adapter";
 const ADAPTERS: Partial<Record<ChannelType, ChannelAdapter>> = {
   widget: websiteAdapter,
   line: lineAdapter,
+  whatsapp: whatsappAdapter,
 };
 
 /** Raised when a channel row has a type with no adapter wired up. */

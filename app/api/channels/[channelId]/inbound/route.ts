@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { channel as channelTable } from "@/db/schema";
 import { InvalidPayloadError } from "@/lib/channels/adapter";
 import { resolveChannelConfig } from "@/lib/channels/config";
+import { matchWebhookChallenge } from "@/lib/channels/handshake";
 import { getAdapter, UnknownChannelError } from "@/lib/channels/registry";
 import { isChannelEnabled, recordInboundSuccess } from "@/lib/channels/status";
 import { verifyInboundWebhook } from "@/lib/channels/verify";
@@ -28,9 +29,48 @@ type RouteContext = { params: Promise<{ channelId: string }> };
  * The widget calls this from whatever origin it's embedded on, so it needs
  * CORS (see lib/cors.ts) — a preflight OPTIONS handler and the header on
  * every response.
+ *
+ * GET is Meta's one-time webhook subscription handshake (WhatsApp Cloud
+ * API) — see lib/channels/handshake.ts. It is not gated on the channel being
+ * enabled: verifying a webhook URL in the App Dashboard is a setup step that
+ * should work even for a channel an owner hasn't enabled yet.
  */
 export async function OPTIONS(): Promise<Response> {
   return corsPreflight();
+}
+
+export async function GET(request: Request, context: RouteContext) {
+  const { channelId } = await context.params;
+
+  const [channel] = await db
+    .select()
+    .from(channelTable)
+    .where(eq(channelTable.id, channelId))
+    .limit(1);
+
+  if (!channel) {
+    return withCors(jsonError("Unknown channel", 404, "channel_not_found"));
+  }
+
+  const config = resolveChannelConfig(channel);
+  const url = new URL(request.url);
+  const challenge = matchWebhookChallenge(
+    {
+      mode: url.searchParams.get("hub.mode"),
+      token: url.searchParams.get("hub.verify_token"),
+      challenge: url.searchParams.get("hub.challenge"),
+    },
+    config,
+  );
+
+  if (challenge === null) {
+    return withCors(jsonError("Verification failed", 403, "handshake_failed"));
+  }
+
+  // Meta requires the raw challenge string as the body, not our usual JSON
+  // envelope — this is Meta's protocol, not our API (CLAUDE.md rule 4 is
+  // about the endpoints we design, not a third party's fixed contract).
+  return withCors(new Response(challenge, { status: 200 }));
 }
 
 export async function POST(request: Request, context: RouteContext) {

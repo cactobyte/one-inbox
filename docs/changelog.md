@@ -5,6 +5,30 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M12 (Sept 2026) — WhatsApp adapter
+
+- **`lib/channels/whatsapp/`** — a second `ChannelAdapter`, no interface
+  change: `parseInbound` turns a WhatsApp Cloud API webhook body into zero or
+  more `InboundMessage`s (1:1 only, WhatsApp has no group-chat concept for
+  business messaging); `sendOutbound` sends a text reply via the Graph API.
+  Registered in `lib/channels/registry.ts` and `lib/channels/verify.ts`
+  (HMAC-SHA256 over `x-hub-signature-256`) alongside LINE.
+- **`lib/channels/handshake.ts`** — Meta's one-time webhook subscription
+  handshake (`hub.mode`/`hub.verify_token`/`hub.challenge`), wired as a new
+  `GET` on the existing inbound route. Channel-type-agnostic, so
+  Messenger/Instagram can reuse it later.
+- The webhook payload includes the customer's real phone number and profile
+  name inline, so — unlike LINE's `"LINE user"` placeholder — contacts get a
+  real name and number with no extra API call.
+- No settings UI yet — a WhatsApp channel can't be self-serve connected
+  through `/settings/channels`, same gap LINE had before M7. Backlog.
+- Verified with pipeline tests on real (pglite) Postgres and a mocked-fetch
+  unit suite, same as M1. Not verified against real Meta infrastructure —
+  needs a real WhatsApp Business number and a public URL; Boris/Jesper's
+  checkpoint.
+
+---
+
 ## M11 (Sept 2026) — Contact/CRM basics
 
 - **`/contacts/[id]`** — a contact profile: email/phone, a free-text notes

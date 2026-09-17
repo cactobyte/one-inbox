@@ -617,6 +617,8 @@ Postgres, not just a mocked test. A wrong signature on the same channel
 still 401s. A non-owner teammate (created through the real M6 invite flow)
 sees the channel list but no connect form. All test rows deleted after.
 
+---
+
 > **Lesson — the key has to actually be set.** First live attempt 500'd:
 > `CredentialsKeyError: CHANNEL_CREDENTIALS_KEY is not set` — correct,
 > fail-closed behaviour; the key genuinely wasn't in local `.env` yet (it's
@@ -831,3 +833,69 @@ under "History across channels," typed notes and saved, reloaded the page
 cold and confirmed the notes round-tripped through Neon (not just client
 state), and confirmed a random contact id 404s. Throwaway account deleted
 after (cascade).
+
+---
+
+## 2026-09-17 · M12 — WhatsApp adapter
+
+**Which channel first — asked, not guessed.** The roadmap deliberately left
+M12's channel choice as "priority order TBD by actual demand" rather than
+fixing an order, so it's a product call, not something to infer from
+CLAUDE.md's "LINE matters more than WhatsApp here" note (that's a market
+observation, not a roadmap instruction). Asked; WhatsApp was chosen.
+
+**Same adapter shape as LINE (M1), reused where the platform actually
+matches.** `parseInbound`/`sendOutbound`, no interface change. WhatsApp
+Cloud API has no group-chat concept for business messaging, so — unlike
+LINE — there's no thread kind to skip; every message is 1:1, keyed by the
+customer's `wa_id` (their phone number, digits only). The webhook envelope
+differs (`entry[].changes[].value.messages[]` vs LINE's flat `events[]`) but
+still batches several messages per delivery, handled the same way M1's
+`InboundMessage[]` return already generalised for.
+
+**Webhook verification — a second entry in the existing type-keyed
+registry, no new mechanism.** `lib/channels/whatsapp/verify.ts`:
+HMAC-SHA256 over the raw body against `x-hub-signature-256` (`sha256=`-
+prefixed hex, vs. LINE's unprefixed base64) — same shape, different
+platform convention. Registered in `lib/channels/verify.ts` alongside LINE,
+exactly the "endpoint strategy keyed on channel type" M1 set up.
+
+**One genuinely new piece: `lib/channels/handshake.ts`, plus a `GET` on the
+inbound route.** WhatsApp (and Messenger/Instagram later) require a
+one-time subscription handshake — Meta GETs the webhook URL with
+`hub.mode`/`hub.verify_token`/`hub.challenge` when the URL is first entered
+in the App Dashboard, and expects the raw challenge echoed back. This has
+no LINE equivalent, so the inbound route needed a new method — not a new
+interface member on `ChannelAdapter` (still exactly two methods; this is
+transport setup, same reasoning that kept signature verification off the
+adapter). Written channel-type-agnostic (matches on `config.verifyToken`
+being present, not on `channel.type === "whatsapp"`) so Messenger/Instagram
+can reuse it without another special case.
+
+**Real phone number, for free.** WhatsApp's webhook payload includes the
+customer's actual phone number and profile name inline (`contacts[]` next
+to `messages[]`) — no second authenticated call needed, unlike LINE's
+display-name gap (M1 hardcodes `"LINE user"`, deferred to a profile-API
+follow-up that never shipped). `contact.phone` and `contact.displayName`
+are populated directly from the webhook; only a missing/no-match profile
+falls back to `"WhatsApp user"`.
+
+**Config shape — `phoneNumberId` public, everything else encrypted.**
+`lib/channels/config.ts#resolveChannelConfig` needed no change (still just
+merges `config` with decrypted `credentials_encrypted`). `phoneNumberId`
+identifies which number sends, not a secret, so it's the one field meant
+for the public `config` column when a settings-UI connect flow exists;
+`accessToken`, `appSecret`, and `verifyToken` are all credentials.
+
+**No settings UI, no way to self-serve connect a WhatsApp number — same gap
+M1's LINE adapter shipped with before M7 existed.** `connectLineChannel`
+(M7) is LINE-specific; extending `/settings/channels` to a second channel
+type is real, separate scope (a form, a connect function, wiring
+`whatsapp` into that page) that CLAUDE.md's "don't invent scope" rules out
+here. Verified the same way M1 was: pipeline tests on real (pglite)
+Postgres (verify → parseInbound → ingestInbound, including a batched
+delivery and a redelivery) and a mocked-`fetch` unit suite for the outbound
+send and the webhook handshake. **Not verified against real Meta
+infrastructure** — that needs a real WhatsApp Business number, app secret,
+and a public URL to hand Meta for the handshake, same "Boris/Jesper's
+checkpoint" as M1's live LINE round-trip. Backlog.

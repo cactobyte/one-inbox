@@ -48,6 +48,29 @@ describe("verifyInboundWebhook — dispatch by channel type", () => {
     ).toBe(false);
   });
 
+  it("uses HMAC signature verification for WhatsApp, not the shared token", () => {
+    const rawBody = JSON.stringify({ entry: [] });
+    const secret = "wa-s3cr3t";
+    const signature =
+      "sha256=" + createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
+
+    expect(
+      verifyInboundWebhook(
+        "whatsapp",
+        auth({ "x-hub-signature-256": signature }, rawBody),
+        { appSecret: secret, inboundToken: "irrelevant" },
+      ),
+    ).toBe(true);
+
+    expect(
+      verifyInboundWebhook(
+        "whatsapp",
+        auth({ "x-channel-token": "irrelevant" }, rawBody),
+        { appSecret: secret, inboundToken: "irrelevant" },
+      ),
+    ).toBe(false);
+  });
+
   it("fails closed for a channel type with neither a verifier nor a token", () => {
     expect(verifyInboundWebhook("messenger", auth({}), {})).toBe(false);
   });
