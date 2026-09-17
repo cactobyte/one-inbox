@@ -392,3 +392,29 @@ button:disabled {
   max-width: none;
   margin: 0;
 }
+
+/* --- broadcast ------------------------------------------------------------ */
+
+.broadcast-target-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.broadcast-target {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.broadcast-results {
+  list-style: none;
+  font-size: 0.9rem;
+}
+
+.broadcast-results li[data-status="failed"] {
+  color: #d33;
+}

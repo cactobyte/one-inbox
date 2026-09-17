@@ -159,6 +159,23 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - No multi-seat / per-agent pricing consideration yet — one plan per
   account, flat. Not asked for; note it in case it becomes relevant.
 
+## Broadcast (M13) deferrals
+
+- No broadcast history — fire-and-forget by deliberate choice (no eighth
+  table). There's no way to see "what did we send last week" or "who did
+  this broadcast reach" after the one-time results summary on `/broadcast`
+  disappears. A `broadcast` (+ recipient status) table would need asking.
+- No contacts directory reused here on purpose — `listBroadcastTargets` is
+  broadcast-specific target resolution, not the M11-backlogged "browsable
+  contacts list." A real contacts directory is still a separate feature.
+- Sequential sends only — a broadcast to hundreds of contacts would be slow
+  (one real API call at a time) and has no batching/rate-limit awareness for
+  any platform's send limits (WhatsApp's 24-hour window rejections included).
+- No idempotency — resubmitting the same broadcast (e.g. a double click)
+  sends it twice; same class of gap as ordinary reply idempotency, above.
+- No way to exclude a channel type or filter the contact list beyond "look
+  at the checkbox list" — fine at low contact counts, not at real scale.
+
 ## Contact/CRM (M11) deferrals
 
 - No contacts directory/list page — the only way to reach a contact profile

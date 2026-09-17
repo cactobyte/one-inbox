@@ -28,6 +28,9 @@ export default async function InboxPage() {
             Get started
           </Link>
         ) : null}
+        <Link href="/broadcast" className="link">
+          Broadcast
+        </Link>
         <Link href="/team" className="link">
           Team
         </Link>

@@ -899,3 +899,76 @@ send and the webhook handshake. **Not verified against real Meta
 infrastructure** — that needs a real WhatsApp Business number, app secret,
 and a public URL to hand Meta for the handshake, same "Boris/Jesper's
 checkpoint" as M1's live LINE round-trip. Backlog.
+
+---
+
+## 2026-09-17 · M13 — Broadcast messaging
+
+**Fire-and-forget, no eighth table — asked, not guessed.** CLAUDE.md is
+explicit that an eighth table needs asking first. Offered the choice
+directly: a persisted `broadcast` campaign record (with a "past broadcasts"
+history page) vs. reusing the existing `message`/`event` rows with a
+one-time results summary and no history. Fire-and-forget was chosen —
+matches M9's "just the plumbing" precedent and stays inside the seven-table
+cap.
+
+**A broadcast is just many `sendReply` calls — no second send-and-persist
+path.** `lib/broadcast.ts#sendBroadcast` loops `lib/inbox/reply.ts#sendReply`
+over each selected contact's most recently active conversation. Same
+adapter dispatch, same `message` row, same `replied` event a single agent
+reply already produces. This does mean a broadcast send is logged with the
+same `replied` event type as an ordinary reply — `docs/backlog.md` already
+flags "`message_sent` vs `replied` — pick one convention" as an open,
+deliberately deferred question; resolving it for broadcast specifically
+while leaving ordinary replies alone would be a second, inconsistent
+convention, so it's left as-is rather than half-fixed here.
+
+**One contact, one send — even across channels.** A contact spanning two
+channels (rare; cross-channel merge is still unsolved, see day 3) gets
+exactly one broadcast message, into their most recently active conversation
+— not one per channel. Sending the same broadcast twice to what might be
+the same human is worse than picking one.
+
+**Target resolution is a two-query JS reduce, not a correlated subquery
+column.** The first attempt at `listBroadcastTargets` used a `sql` scalar
+subquery keyed on `contact.id` — the same shape `lib/contacts.ts`'s
+last-message-preview subquery uses successfully. It silently returned no
+targets: Drizzle only table-qualifies a query's identifiers when its own
+join shape requires it, so a single-table `.from(contact)` rendered the
+embedded subquery's `${contact.id}` as bare `"id"`, which resolved inside
+the subquery's own `FROM conversation` scope instead of correlating to the
+outer row — `where "contact_id" = "id"` became a self-comparison on
+`conversation`, always false. (`listContactConversations`'s version works
+only because its outer query already joins two tables, forcing Drizzle to
+qualify identifiers throughout — an accident of that query's shape, not a
+guarantee.) Fixed by fetching every conversation for the account once,
+joined with its channel, and reducing to "first (most recent) per
+`contactId`" in JS — no cross-scope identifier ambiguity possible.
+
+> **Lesson — a raw `sql` fragment referencing an outer single-table query's
+> column can silently self-correlate instead of erroring.** Caught by a
+> test asserting real values (`listBroadcastTargets` returned contacts with
+> the right names), not a type error or a thrown exception — the query ran
+> and returned an empty result set, which looks exactly like "no data yet"
+> until you check with a fixture that should have data. Any future
+> correlated-subquery column should either match a query shape that already
+> joins ≥2 tables (like the working precedent), or be verified against a
+> real pglite fixture before trusting it.
+
+**No settings/history UI beyond the send form itself.** `/broadcast`: a
+contact checklist (every contact, paired with their target channel), a
+message body, and a per-recipient sent/failed result list shown once after
+sending — no page remembers that a broadcast happened. A `POST
+/api/broadcasts` route, not a server action, mirroring `POST
+/api/conversations/:id/messages`'s existing shape (CLAUDE.md rule 4:
+design the internal API as if it were already public) rather than adding a
+second, differently-shaped entry point for what is mechanically the same
+send.
+
+**Verified by tests only, not live** — no real LINE/WhatsApp business
+account was reused for this milestone; `lib/broadcast.test.ts` covers
+target resolution (per-account scoping, most-recent-conversation pick),
+successful multi-recipient sends, one recipient's platform rejection not
+blocking the rest, an unknown contact id failing without failing the batch,
+and de-duplicating a repeated contact id. A live check of `/broadcast`
+against a real channel is Boris/Jesper's checkpoint.

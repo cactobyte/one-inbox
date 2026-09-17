@@ -5,6 +5,26 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M13 (Sept 2026) — Broadcast messaging
+
+- **`/broadcast`** — pick any number of contacts, write one message, send.
+  Each contact gets it on their own channel, via their most recently active
+  conversation.
+- **`lib/broadcast.ts`** — `sendBroadcast` loops the existing
+  `sendReply` (M2) over each selected contact, sequentially; one
+  recipient's platform rejection doesn't stop the rest, and results are
+  reported per contact (sent/failed).
+- No new table and no broadcast history — fire-and-forget, asked and
+  confirmed. Sending a broadcast produces the exact same `message` row and
+  `replied` event an ordinary reply does; nothing remembers it was sent in
+  bulk.
+- **`POST /api/broadcasts`** — same agent-session-cookie, real-status-code
+  shape as the existing per-conversation send endpoint.
+- Verified with `lib/broadcast.test.ts` on real (pglite) Postgres. Not
+  verified against a real channel live — Boris/Jesper's checkpoint.
+
+---
+
 ## M12 (Sept 2026) — WhatsApp adapter
 
 - **`lib/channels/whatsapp/`** — a second `ChannelAdapter`, no interface
