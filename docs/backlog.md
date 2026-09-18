@@ -193,6 +193,26 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
 - No way to exclude a channel type or filter the contact list beyond "look
   at the checkbox list" — fine at low contact counts, not at real scale.
 
+## AI-assisted replies (M14) deferrals
+
+- Auto-reply rules — the "possibly" half of the roadmap's M14 line.
+  Deliberately not built this round (see decisions.md): sending without a
+  human reviewing first is a bigger, riskier surface (config UI, a
+  send-without-review path, real cost if a bad rule loops) than a first AI
+  feature should take on. A real future milestone, not folded in here.
+- No settings UI — `GEMINI_API_KEY` is a Vercel env var only; there's no way
+  for an owner to bring their own key, per-account, through the product.
+- No rate-limit handling beyond surfacing Gemini's error — hitting the free
+  tier's per-minute/per-day cap shows "Couldn't suggest a reply" with no
+  retry-after awareness or backoff.
+- No usage tracking — nothing records how many suggestions were generated,
+  used, or discarded, so there's no way to tell if the feature is worth its
+  (currently $0, but not always-will-be) cost without checking Google's own
+  console.
+- The prompt is fixed and untuned — no per-account tone/style customization,
+  no evaluation of suggestion quality beyond this session's manual spot
+  check.
+
 ## Contact/CRM (M11) deferrals
 
 - No contacts directory/list page — the only way to reach a contact profile

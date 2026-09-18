@@ -1016,3 +1016,72 @@ and a pipeline test on real pglite Postgres (verify → parseInbound →
 ingestInbound, including redelivery idempotency). No real Meta Page or IG
 Business account was used — that's Boris/Jesper's checkpoint, same as every
 other channel adapter so far.
+
+---
+
+## 2026-09-18 · M14 — AI-assisted replies
+
+**Gemini, not Claude — asked and confirmed, not assumed.** Anthropic's own
+Claude API was the obvious first candidate (this whole project is built with
+Claude Code), but it's metered, paid-per-token infrastructure — unlike every
+other external service this app touches so far (LINE/WhatsApp/Messenger/
+Instagram/Stripe/Resend all have a free tier or cost nothing at this app's
+scale). Raised that explicitly rather than silently wiring up a paid API on
+an unstated budget. Boris asked whether a genuinely free option existed
+rather than spending his existing Grok credit; Gemini's free tier (rate-
+limited, not a spend-down trial balance, unlike Grok's credit balance) was
+the better fit for a feature meant to run indefinitely, so that's what got
+built.
+
+**REST over the SDK, no exception for AI.** `lib/ai/gemini.ts` calls
+Gemini's `generateContent` endpoint over `fetch`, matching LINE, Stripe and
+Resend rather than adding `@google/generative-ai` or any Gemini SDK —
+CLAUDE.md's "ask before adding a dependency" rule doesn't stop applying just
+because the dependency would be for an AI feature specifically.
+
+**Suggested replies only, not auto-reply rules.** The roadmap line reads
+"suggested responses, possibly auto-reply rules" — the "possibly" was read
+as scope daylight, not a commitment. Auto-reply rules mean a message sends
+without a human ever seeing it, which is a materially bigger and riskier
+surface (new config, a send-without-review path, real cost if a bad rule
+loops) for a first AI feature in this codebase. Backlogged as its own future
+milestone rather than folded in here.
+
+**The suggestion never sends anything — it only fills the textarea.**
+`suggestReply` (`lib/ai/suggest-reply.ts`) is a pure drafting function: given
+a conversation's recent messages, it returns text. It has no access to
+`sendReply`, no database handle, nothing that could turn a bad suggestion
+into a bad send — the agent still reviews, edits, and clicks Send through
+the exact same path M2 built. Reuses the account-scoped `listMessages` query
+the conversation view already reads, so the AI provider only ever sees one
+conversation's own messages, capped at the last 10 to bound cost.
+
+**Live-verified this session with a throwaway key and a throwaway
+tenant — and it caught two real problems reading the code never would
+have:**
+
+1. The model this was first written against, `gemini-2.0-flash`, had
+   already been retired by Google by the time it was tested — the API's own
+   404 named the replacement (`gemini-3.6-flash`). Swapped the one constant;
+   confirms the "swap the string here" comment in `gemini.ts` isn't
+   theoretical.
+2. `reply-form.tsx`'s success handler read `body.suggestion` directly, but
+   every route in this app answers success through `lib/http.ts#jsonOk`,
+   which wraps the payload as `{ data: { suggestion } }` — so the real
+   request came back `200` with a real suggestion, and the UI still showed
+   "Couldn't suggest a reply." A silently-wrong client, not a thrown error —
+   found only because the response was inspected via the browser's network
+   panel after the "happy path" didn't look happy. Fixed to read
+   `body.data.suggestion`, matching `broadcast-form.tsx`'s existing
+   precedent for the same envelope.
+
+The throwaway Gemini key was set in the local, gitignored `.env` only (never
+committed); the throwaway account/channel/conversation created to exercise
+the live UI were deleted from Neon immediately after verification, same
+"throwaway tenant, then delete" pattern used for auth-milestone live checks.
+
+**No settings UI, no per-account key.** `GEMINI_API_KEY` is one platform-
+level env var (like `STRIPE_SECRET_KEY`/`RESEND_API_KEY`), not a per-account
+credential connected through Settings — this is an internal tool helping
+*this app's* agents write replies, not a customer-facing channel connection,
+so the Resend/Stripe precedent fits better than the LINE/WhatsApp one.

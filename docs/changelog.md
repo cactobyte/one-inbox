@@ -5,6 +5,25 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M14 (Sept 2026) — AI-assisted replies
+
+- **"Suggest reply"** button next to Send on every conversation. Drafts a
+  reply from the last 10 messages and fills the textarea — the agent still
+  reviews, edits and clicks Send themselves; nothing is sent automatically.
+  Auto-reply rules (the "possibly" half of M14's roadmap line) are deferred.
+- **`lib/ai/gemini.ts`, `lib/ai/suggest-reply.ts`** — Google Gemini over its
+  REST API, no SDK (same choice as LINE/Stripe/Resend). Chosen over Claude
+  specifically for its real, indefinite free tier — asked and confirmed
+  first; see decisions.md.
+- `POST /api/conversations/:id/suggest-reply` — reuses the same
+  account-scoped `listMessages` query the conversation view already reads.
+- Live-verified against the real Gemini API this session (with a throwaway
+  key and a throwaway account/conversation, both since removed/deleted) —
+  caught and fixed a real bug this way, not by reading the code: see
+  decisions.md.
+
+---
+
 ## M12 continued (Sept 2026) — Messenger and Instagram adapters
 
 - **`lib/channels/messenger/`, `lib/channels/instagram/`** — two more

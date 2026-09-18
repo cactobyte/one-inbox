@@ -286,6 +286,13 @@ button:disabled {
   resize: vertical;
 }
 
+.reply-form-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
 /* --- team page --------------------------------------------------------- */
 
 .team-main {
