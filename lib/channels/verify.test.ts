@@ -71,7 +71,27 @@ describe("verifyInboundWebhook — dispatch by channel type", () => {
     ).toBe(false);
   });
 
+  it("uses the same HMAC verifier for Messenger and Instagram as WhatsApp", () => {
+    const rawBody = JSON.stringify({ entry: [] });
+    const secret = "meta-s3cr3t";
+    const signature =
+      "sha256=" + createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
+
+    for (const type of ["messenger", "instagram"] as const) {
+      expect(
+        verifyInboundWebhook(type, auth({ "x-hub-signature-256": signature }, rawBody), {
+          appSecret: secret,
+        }),
+      ).toBe(true);
+      expect(
+        verifyInboundWebhook(type, auth({ "x-hub-signature-256": "sha256=wrong" }, rawBody), {
+          appSecret: secret,
+        }),
+      ).toBe(false);
+    }
+  });
+
   it("fails closed for a channel type with neither a verifier nor a token", () => {
-    expect(verifyInboundWebhook("messenger", auth({}), {})).toBe(false);
+    expect(verifyInboundWebhook("shopee", auth({}), {})).toBe(false);
   });
 });

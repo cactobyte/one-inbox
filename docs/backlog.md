@@ -107,6 +107,23 @@ came up in. Not prioritised. One line each. Product-roadmap items live in
   `parseInbound` only reads `value.messages`; status updates for our own
   outbound sends are ignored, not stored anywhere.
 
+### Messenger and Instagram (M12 continued) deferrals
+
+- No settings UI — same gap as WhatsApp's. A `messenger`/`instagram`
+  channel can only be created by inserting a `channel` row directly.
+- Not verified against real Meta infrastructure — no real Facebook Page,
+  Instagram Business account, or public webhook URL was available this
+  session. Boris/Jesper's checkpoint.
+- No profile-name enrichment — the webhook carries no display name for
+  either platform; contacts show as generic "Facebook user"/"Instagram
+  user" until a `GET /{psid}?fields=first_name,last_name`-style call (and
+  the extra permission it needs) is added.
+- Both are text-only outbound and inbound-attachment-only messages
+  (image/sticker/audio/etc.) are skipped entirely rather than shown as a
+  placeholder — no attachment CDN-URL resolution built.
+- No delivery/read receipt handling — `messaging` items with no
+  `message.mid` (postbacks, receipts) are silently skipped.
+
 ### Settings/integrations (M7) deferrals
 
 - ~~`CHANNEL_CREDENTIALS_KEY` not set in Vercel~~ — set 2026-09-15. Connecting

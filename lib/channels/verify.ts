@@ -31,7 +31,12 @@ type Verifier = (auth: WebhookAuth, config: Record<string, unknown>) => boolean;
 
 const VERIFIERS: Partial<Record<ChannelType, Verifier>> = {
   line: verifyLineWebhook,
+  // Messenger and Instagram are the same Meta app family as WhatsApp Cloud
+  // API — identical `x-hub-signature-256` HMAC-SHA256-over-raw-body scheme,
+  // so the one verifier is reused rather than reimplemented per channel.
   whatsapp: verifyWhatsAppWebhook,
+  messenger: verifyWhatsAppWebhook,
+  instagram: verifyWhatsAppWebhook,
 };
 
 /** The default for any channel without a platform-specific verifier. */

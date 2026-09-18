@@ -972,3 +972,47 @@ successful multi-recipient sends, one recipient's platform rejection not
 blocking the rest, an unknown contact id failing without failing the batch,
 and de-duplicating a repeated contact id. A live check of `/broadcast`
 against a real channel is Boris/Jesper's checkpoint.
+
+---
+
+## 2026-09-18 · M12 continued — Messenger and Instagram adapters
+
+**Why this ran before M14, not after.** Asked to "finish M14" (AI-assisted
+replies), but CLAUDE.md's "What not to do" section is explicit: AI features
+wait until three more channels exist beyond the original two (website +
+LINE), and Phase 3 had only added one (WhatsApp, M12) since that rule was
+written. Flagged the gap rather than building M14 anyway or silently
+reinterpreting the rule; Boris chose to close the gap with two more channel
+adapters before M14, picking Messenger and Instagram.
+
+**Both reuse WhatsApp's verifier and the existing handshake, unchanged.**
+Messenger and Instagram DMs are the same Meta app family and Messenger
+Platform as WhatsApp Cloud API: identical `x-hub-signature-256`
+HMAC-SHA256-over-raw-body scheme and identical `hub.mode`/`hub.verify_token`/
+`hub.challenge` GET handshake. `lib/channels/verify.ts` registers
+`verifyWhatsAppWebhook` under all three channel types instead of writing (or
+extracting into a shared helper) the same function twice more — no new
+files, no refactor of the M12 WhatsApp code it reuses.
+
+**Each still gets its own adapter, not a shared "Meta messaging" module.**
+`parseInbound`/`sendOutbound` bodies are near-identical between Messenger
+and Instagram (`entry[].messaging[]`, `POST /me/messages`), but so were
+LINE's and WhatsApp's push-style adapters, and those stayed separate files —
+each is its own `ChannelType` with its own config and its own likely future
+divergence (IG story replies, Messenger's richer template messages). A
+shared module would be an abstraction for a pattern that has held twice, not
+proven twice as ongoing — reused the *verifier*, not the adapter shape.
+
+**No profile-name enrichment** — the webhook carries no display name for
+either platform (Meta requires a separate, permission-gated Graph API call
+per user), so both show a generic name ("Facebook user" / "Instagram user"),
+same deferral LINE made in M1 for the same reason. **No settings UI, no
+live verification, no attachment handling, no non-text outbound** — same
+backlog shape as WhatsApp's M12 round; see `docs/backlog.md`.
+
+Verified by tests only: `lib/channels/messenger/` and
+`lib/channels/instagram/` each get an adapter unit suite (mocked `fetch`)
+and a pipeline test on real pglite Postgres (verify → parseInbound →
+ingestInbound, including redelivery idempotency). No real Meta Page or IG
+Business account was used — that's Boris/Jesper's checkpoint, same as every
+other channel adapter so far.

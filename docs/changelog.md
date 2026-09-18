@@ -5,6 +5,23 @@ What shipped, newest first. One entry per milestone. The reasoning is in
 
 ---
 
+## M12 continued (Sept 2026) — Messenger and Instagram adapters
+
+- **`lib/channels/messenger/`, `lib/channels/instagram/`** — two more
+  channel adapters, chosen (M14's AI-features gate needed two more channels
+  before M14 could start; see decisions.md). Both ride the Messenger
+  Platform's shared webhook/Send API shape — `entry[].messaging[]`,
+  `POST /me/messages` — differing only in `object` field and IGSID vs PSID.
+- Both reuse WhatsApp's `x-hub-signature-256` HMAC verifier and the existing
+  channel-agnostic webhook handshake as-is — same Meta app family, identical
+  scheme, nothing to reimplement.
+- Deferred, same as WhatsApp's M12 round: no settings UI, no live
+  verification against a real Page/IG account, no attachment/media
+  handling, no profile-name enrichment (generic "Facebook user"/"Instagram
+  user" until a profile fetch is added), text-only outbound.
+
+---
+
 ## M13 (Sept 2026) — Broadcast messaging
 
 - **`/broadcast`** — pick any number of contacts, write one message, send.
