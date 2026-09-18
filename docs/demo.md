@@ -32,8 +32,11 @@ Messenger, WhatsApp and the rest without changing anything the agent sees.
    - Email: `owner@example.com`
    - Password: **not written here on purpose** — this file is in a public
      repo. Get it from whoever set up the deployment (it was last set on
-     day 5). If you have database access you can reset it with
-     `SEED_AGENT_PASSWORD=... npm run db:seed`.
+     day 5). If you have `DATABASE_URL` for the production database, reset
+     it (keeps the account's existing conversation history) with:
+     `SEED_AGENT_PASSWORD=... SEED_RESET_PASSWORD=true npm run db:seed`
+     — plain `npm run db:seed` only sets a password when creating a brand
+     new agent, it does not touch an existing one.
    - You land on the inbox. Leave it here.
 
 3. **Left window — open the customer's website with the chat widget:**

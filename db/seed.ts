@@ -10,6 +10,11 @@
  * script is for the demo/dev account and its widget channel, and it marks
  * the agent pre-verified. Self-contained (own DB client) so it runs under
  * plain Node without a TypeScript path resolver.
+ *
+ * If SEED_AGENT_EMAIL already exists, this reuses its account and channel
+ * and leaves the password alone — add SEED_RESET_PASSWORD=true to also set
+ * its password to SEED_AGENT_PASSWORD (e.g. to recover a forgotten demo
+ * account's login without losing its conversation history).
  */
 import { randomBytes } from "node:crypto";
 
@@ -54,6 +59,17 @@ let accountId: string;
 if (existing.length > 0) {
   accountId = existing[0].accountId;
   console.log(`Agent ${email} already exists — reusing its account.`);
+
+  // Opt-in only: a bare re-run must stay a no-op for the password, or
+  // running this to seed the widget channel would silently lock out
+  // whoever knows the current one.
+  if (process.env.SEED_RESET_PASSWORD === "true") {
+    await db
+      .update(agent)
+      .set({ passwordHash: await hashPassword(password) })
+      .where(eq(agent.id, existing[0].id));
+    console.log(`Password reset for ${email}.`);
+  }
 } else {
   const [acct] = await db
     .insert(account)
